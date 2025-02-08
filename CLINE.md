@@ -87,6 +87,177 @@ graph LR
     B --> E[ローカルストレージ]
 ```
 
+### 2.4 データフローアーキテクチャ
+
+#### 2.4.1 データソースと変換フロー
+
+1. 入力データソース
+   - 請求書PDF
+     - 形式：PDF形式（バージョン1.4以上）
+     - 保存場所：ローカルファイルシステム
+     - 用途：テキスト抽出、画像抽出の入力
+
+2. 中間データ構造
+   a. PDFパース結果
+      - 形式：Dict[int, List[TextElement]]
+      - 内容：ページ毎のテキスト要素と座標情報
+      - 保存：メモリ上（一時的）
+      - 用途：構造化エンジンの入力
+
+   b. 構造化データ（JSON）
+      - 形式：DocumentStructure（Pydanticモデル）
+      - 内容：階層化された請求書情報
+      - 保存：メモリ上（一時的）
+      - 用途：バリデーション、UI表示の入力
+
+   c. 明細画像データ
+      - 形式：JPEG（解像度360dpi）
+      - 保存場所：ローカルファイルシステム
+      - 命名規則：「PDFファイル名－明細番号.jpg」
+      - 用途：UI表示、データ確認
+
+3. 永続化データ
+   a. CosmosDB
+      - コンテナ：modifications
+      - 主要データ：
+        * 修正履歴（ModificationHistory）
+        * 承認状態
+        * ユーザー操作ログ
+      - インデックス：invoice_id, modified_at
+      - 用途：監査証跡、状態管理
+
+4. 出力データ
+   a. エクセル/CSV
+      - 形式：XLSX/CSV（UTF-8 BOM付き）
+      - 内容：フラット化された請求書データ
+      - カラム順：document → customer → entry → stock → quantity
+      - 用途：L-NET売上管理システムへの入力
+
+#### 2.4.2 データ変換フロー図
+```mermaid
+graph TD
+    subgraph "入力"
+        A[請求書PDF] --> B[PDFパーサー]
+    end
+
+    subgraph "中間データ処理"
+        B --> C[テキスト+座標情報]
+        B --> D[明細画像]
+        C --> E[構造化エンジン]
+        E --> F[構造化データ]
+        F --> G[バリデーションエンジン]
+    end
+
+    subgraph "UI層"
+        D --> H[画像表示]
+        G --> I[データグリッド]
+        I --> J[ユーザー修正]
+    end
+
+    subgraph "永続化"
+        J --> K[CosmosDB]
+        K --> L[修正履歴]
+        K --> M[承認状態]
+    end
+
+    subgraph "出力"
+        J --> N[エクセル/CSV]
+        N --> O[L-NET入力用データ]
+    end
+```
+
+#### 2.4.3 データ変換マッピング
+
+1. PDF → 構造化データ
+```typescript
+// 入力: PDFテキスト要素
+type TextElement = {
+    text: string;
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+    page: number;
+}
+
+// 出力: 構造化データ
+interface DocumentStructure {
+    pdf_filename: string;
+    total_amount: string;
+    customers: CustomerEntry[];
+}
+```
+
+2. 構造化データ → UI表示データ
+```typescript
+// UI表示用データ構造
+interface UIDisplayData {
+    details: {
+        id: string;
+        no: string;
+        description: string;
+        amount: string;
+        status: 'pending' | 'approved' | 'error';
+        imageUrl: string;
+    }[];
+    validation: {
+        errors: ValidationError[];
+        warnings: ValidationWarning[];
+    };
+}
+```
+
+3. UI修正データ → 永続化データ
+```typescript
+// 修正履歴データ構造
+interface ModificationHistory {
+    invoice_id: string;
+    modified_at: string;
+    modified_fields: {
+        field: string;
+        old_value: string;
+        new_value: string;
+        reason: string;
+    }[];
+    page_no: number;
+    user_id: string;
+}
+```
+
+4. 構造化データ → エクセル/CSV
+```typescript
+// エクセル/CSV出力カラム定義
+interface ExportColumns {
+    // ドキュメント情報
+    pdf_filename: string;
+    total_amount: string;
+    
+    // 顧客情報
+    customer_code: string;
+    customer_name: string;
+    department: string;
+    box_number: string;
+    
+    // 明細情報
+    no: string;
+    description: string;
+    tax_rate: string;
+    amount: string;
+    date_range: string;
+    page_no: number;
+    
+    // 在庫情報
+    stock_carryover: number;
+    stock_incoming: number;
+    stock_w_value: number;
+    // ... 他の在庫関連フィールド
+    
+    // 数量情報
+    quantity_quantity: number;
+    quantity_unit_price: number;
+}
+```
+
 ## 3. モジュール設計
 
 ### 3.1 データモデル
@@ -637,3 +808,284 @@ class LogManager:
 | API利用コストの増大 | 中 | 使用量の監視、最適化の実施 |
 | 処理速度の低下 | 中 | パフォーマンスチューニング、並列処理の活用 |
 | データ整合性の崩れ | 高 | 厳密なバリデーション、バックアップの確保 |
+
+## 10. 詳細UI設計
+
+### 10.0 画面概要仕様
+
+#### 10.0.1 基本要件
+- 対応OS：Windows 10以上
+- 画面解像度：1280×720以上（デスクトップ専用）
+- 表示言語：日本語
+- 実行環境：Python 3.10以上、PySide6
+
+#### 10.0.2 バリデーションワークフロー
+1. 明細行の表示と選択
+   - サイドパネルからの明細選択
+   - キーボードショートカットによる移動
+   - 複数明細の一括選択
+
+2. データ確認プロセス
+   - クロップ画像の確認
+   - 構造化データの検証
+   - フィールド状態の確認
+
+3. 修正・承認フロー
+   - エラー項目の修正
+   - 修正履歴の記録
+   - 明細行の承認
+   - 一括承認処理
+
+4. 完了処理
+   - 全明細の承認確認
+   - データの最終検証
+   - 確定処理の実行
+
+#### 10.0.3 画面遷移フロー
+```
+[PDFアップロード] → [明細一覧表示] → [明細確認・修正] → [承認] → [確定]
+```
+
+### 10.1 画面レイアウト構成
+
+#### 10.1.1 画面レイアウト概要
+```
++--------------------+--------------------------------+
+|  [フィルター]      |  [ショートカット表示]          |
+|  ○ すべて         |  Alt+↑↓: 移動                  |
+|  ○ 未確認のみ     |  Space: 選択  Enter: 承認      |
++--------------------+--------------------------------+
+|  明細行一覧        |  [明細行状態バー]              |
+|  [幅: 250px]      |                                |
+|                    |  [クロップ画像]               |
+|  [✓] No.1  ✓      |    + - □                      |
+|      製品A         |                                |
+|      100×¥1,000   |  [構造化データグリッド]        |
+|                    |  +----------+----------+      |
+|  [ ] No.2  ⚠      |  |明細番号  |商品名   |      |
+|      製品B         |  |[No.1]    |[製品A]  |      |
+|      200×¥2,000   |  +----------+----------+      |
+|                    |                                |
++--------------------+                                |
+|  選択: 2/10件      |                                |
+|  [一括承認]        |                                |
++--------------------+--------------------------------+
+```
+
+#### 10.1.2 Qt実装コード
+```python
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        
+        # メインウィジェット
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
+        
+        # メインレイアウト（水平分割）
+        main_layout = QHBoxLayout(main_widget)
+        
+        # 左パネル（明細一覧）
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        
+        # フィルター部分
+        filter_group = QGroupBox("フィルター")
+        filter_layout = QVBoxLayout(filter_group)
+        all_radio = QRadioButton("すべて")
+        unconfirmed_radio = QRadioButton("未確認のみ")
+        filter_layout.addWidget(all_radio)
+        filter_layout.addWidget(unconfirmed_radio)
+        
+        # 明細一覧（QListWidget）
+        detail_list = QListWidget()
+        detail_list.setFixedWidth(250)
+        
+        # 一括承認部分
+        bulk_approve = QPushButton("一括承認")
+        selection_label = QLabel("選択: 0/0件")
+        
+        left_layout.addWidget(filter_group)
+        left_layout.addWidget(detail_list)
+        left_layout.addWidget(selection_label)
+        left_layout.addWidget(bulk_approve)
+        
+        # 右パネル（詳細表示）
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        
+        # ショートカット表示
+        shortcut_label = QLabel("Alt+↑↓: 移動  Space: 選択  Enter: 承認")
+        
+        # 明細行状態バー
+        status_bar = QStatusBar()
+        
+        # クロップ画像表示
+        image_view = QGraphicsView()
+        toolbar = QToolBar()
+        toolbar.addAction(QIcon(), "拡大")
+        toolbar.addAction(QIcon(), "縮小")
+        toolbar.addAction(QIcon(), "実寸")
+        
+        # 構造化データ表示
+        data_table = QTableWidget()
+        
+        right_layout.addWidget(shortcut_label)
+        right_layout.addWidget(status_bar)
+        right_layout.addWidget(toolbar)
+        right_layout.addWidget(image_view)
+        right_layout.addWidget(data_table)
+        
+        # メインレイアウトに追加
+        main_layout.addWidget(left_panel)
+        main_layout.addWidget(right_panel)
+```
+
+### 10.2 コンポーネント仕様
+
+#### 10.2.1 サイドパネル明細行表示（QListWidget）
+- カスタムデリゲートによる2行表示
+  - 1行目：明細番号 + 商品名 + 状態アイコン
+  - 2行目：数量×単価
+- 状態アイコン表示（QIcon）
+  - ✓ 承認済（QColor(76, 175, 80)）
+  - ⚠ エラーあり（QColor(244, 67, 54)）
+  - ⟳ 確認中（QColor(33, 150, 243)）
+  - － 未確認（QColor(158, 158, 158)）
+
+#### 10.2.2 構造化データ表示（QTableWidget）
+- カスタムデリゲートによるグリッド表示
+- フィールド状態の視覚的表現（QColor）
+  - 未修正：白背景（Qt::white）
+  - ユーザー修正済：薄い青背景（QColor(227, 242, 253)）
+  - システム自動修正：薄い緑背景（QColor(232, 245, 233)）
+  - 要確認：薄い黄背景（QColor(255, 248, 225)）
+  - エラー：薄い赤背景（QColor(255, 235, 238)）
+
+#### 10.2.3 クロップ画像表示（QGraphicsView）
+- 画像操作機能
+  - 拡大/縮小（QGraphicsView::scale）
+  - 実寸表示（QGraphicsView::resetTransform）
+  - プリロード（QPixmapCache使用、前後2件）
+
+### 10.3 キーボードショートカット
+
+#### 10.3.1 明細行操作
+- Alt + ↑: 前の明細行
+- Alt + ↓: 次の明細行
+- Alt + Shift + ↑: 前のエラー/未確認明細行
+- Alt + Shift + ↓: 次のエラー/未確認明細行
+
+#### 10.3.2 選択操作
+- Space: 現在の明細行を選択/解除
+- Alt + A: すべて選択
+- Alt + D: 選択解除
+
+#### 10.3.3 承認操作
+- Enter: 現在の明細行を承認
+- Alt + Enter: 選択中の明細行を一括承認
+
+#### 10.3.4 画像操作
+- Ctrl + '+': 拡大
+- Ctrl + '-': 縮小
+- Ctrl + '0': 実寸表示
+
+### 10.4 データ連動仕様
+
+#### 10.4.1 明細行選択時の動作
+1. 明細行選択
+2. クロップ画像の即時切り替え
+3. 構造化データの更新
+4. 状態表示の更新
+
+#### 10.4.2 プリロード仕様
+- 対象：前後2件の明細行
+- プリロードデータ
+  - クロップ画像
+  - 構造化データ
+  - 状態情報
+
+#### 10.4.3 一括承認機能
+- 複数明細行の選択
+- 選択明細行の一括承認
+- 承認後の選択状態クリア
+
+#### 10.4.4 Qt実装コード
+```python
+class MainWindow(QMainWindow):
+    # カスタムシグナル
+    detail_selected = Signal(str)  # 明細番号
+    detail_approved = Signal(str)  # 明細番号
+    details_bulk_approved = Signal(list)  # 明細番号リスト
+    
+    def __init__(self):
+        super().__init__()
+        self._setup_signals()
+    
+    def _setup_signals(self):
+        """シグナル・スロット接続"""
+        # 明細選択
+        self.detail_list.itemSelectionChanged.connect(self._on_detail_selected)
+        self.detail_list.itemDoubleClicked.connect(self._on_detail_double_clicked)
+        
+        # 承認操作
+        self.approve_button.clicked.connect(self._on_detail_approved)
+        self.bulk_approve_button.clicked.connect(self._on_bulk_approved)
+        
+        # キーボードショートカット
+        QShortcut(QKeySequence("Alt+Up"), self, self._select_previous_detail)
+        QShortcut(QKeySequence("Alt+Down"), self, self._select_next_detail)
+        QShortcut(QKeySequence("Return"), self, self._on_detail_approved)
+
+    def _on_detail_selected(self):
+        """明細選択時の処理"""
+        current_item = self.detail_list.currentItem()
+        if not current_item:
+            return
+            
+        detail_no = current_item.data(Qt.UserRole)
+        
+        # クロップ画像更新
+        self._update_detail_image(detail_no)
+        
+        # 構造化データ更新
+        self._update_detail_data(detail_no)
+        
+        # 状態表示更新
+        self._update_status(detail_no)
+        
+        # プリロード実行
+        self._preload_adjacent_details(detail_no)
+    
+    def _preload_adjacent_details(self, current_no: str):
+        """前後2件のプリロード"""
+        adjacent_nos = self._get_adjacent_detail_nos(current_no, 2)
+        for no in adjacent_nos:
+            # 画像のプリロード
+            image = self._load_detail_image(no)
+            QPixmapCache.insert(f"detail_{no}", image)
+            
+            # データのプリロード
+            self._cache_detail_data(no)
+
+    def _on_bulk_approved(self):
+        """一括承認処理"""
+        selected_items = self.detail_list.selectedItems()
+        if not selected_items:
+            return
+            
+        detail_nos = [
+            item.data(Qt.UserRole)
+            for item in selected_items
+        ]
+        
+        # 一括承認実行
+        self.details_bulk_approved.emit(detail_nos)
+        
+        # 選択状態クリア
+        self.detail_list.clearSelection()
+        
+        # UI更新
+        self._update_selection_count()
+        self._refresh_detail_list()
+```
