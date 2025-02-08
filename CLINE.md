@@ -261,6 +261,26 @@ interface ExportColumns {
 ## 3. モジュール設計
 
 ### 3.1 データモデル
+
+#### 3.1.1 データモデルの基本概念
+請求書データは階層構造で管理され、以下の関係性を持ちます：
+- DocumentStructure: 請求書全体を表現する最上位構造
+- CustomerEntry: 取引先情報と明細のグループ
+- EntryDetail: 個々の請求明細項目
+- StockInfo/QuantityInfo: 明細に関連する在庫・数量情報
+
+この階層構造により、以下の利点が得られます：
+- 請求書全体の一貫性の確保
+- 顧客単位での明細管理の実現
+- 明細情報の柔軟な拡張性
+
+#### 3.1.2 データ検証と整合性
+各クラスはPydanticのBaseModelを継承し、以下の機能を提供：
+- 型安全性の確保
+- 必須項目の検証
+- データ変換の自動化
+
+#### 3.1.3 実装コード
 ```python
 class StockInfo(BaseModel):
     carryover: int
