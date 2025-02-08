@@ -604,7 +604,15 @@ class LogManager:
 
 5. エクセル出力機能の実装（1週間）
    - データ変換処理の実装
+     - ドキュメント情報（pdf_filename, total_amount）
+     - 顧客情報（customer_code, customer_name, department, box_number）
+     - 明細情報（no, description, tax_rate, amount, date_range, page_no）
+     - 在庫情報（carryover, incoming, w_value, outgoing, remaining, total, unit_price）
+     - 数量情報（quantity, unit_price）
    - Excel形式での出力処理
+     - カテゴリ別の列順序定義
+     - データのフラット化処理
+     - CSV形式での出力
    - メタデータ付与の実装
 
 6. UI基本機能の実装（2週間）
