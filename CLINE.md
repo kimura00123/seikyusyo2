@@ -210,18 +210,122 @@ class ValidationEngine:
 
 ### 3.5 画像処理モジュール
 ```python
+@dataclass
+class DetailLine:
+    """明細行の情報を保持するクラス"""
+    page_num: int
+    no: str
+    y_top: float
+    y_bottom: float
+    description: str = ""
+    x_left: float = 40
+    x_right: float = 800
+
 class ImageProcessor:
-    def __init__(self, dpi: int = 360):
+    def __init__(self, dpi: int = 200):
         self.dpi = dpi
-        self.image_params = self._load_image_params()
+        self.pdf_height = 842  # A4サイズの高さ（ポイント単位）
 
-    def extract_detail_images(self, pdf_path: str, coordinates: List[Coordinate]) -> List[Image]:
-        """明細部分の画像抽出"""
-        pass
+    def extract_detail_regions(self, pdf_path: str) -> List[DetailLine]:
+        """PDFから明細行の位置情報を抽出する"""
+        detail_lines = []
+        current_page = 0
 
-    def save_images(self, images: List[Image], output_dir: str) -> List[str]:
-        """画像の保存処理（PDFファイル名－明細番号.jpg形式）"""
-        pass
+        for page_layout in extract_pages(pdf_path):
+            # 明細番号とその位置を収集
+            number_positions = self._collect_detail_numbers(page_layout)
+            
+            # 各明細行の範囲を決定
+            page_details = self._determine_detail_regions(
+                number_positions, 
+                page_layout.height, 
+                current_page
+            )
+            detail_lines.extend(page_details)
+            current_page += 1
+
+        return detail_lines
+
+    def process_details(self, pdf_path: str, detail_lines: List[DetailLine], 
+                       output_dir: str, debug_dir: str = None):
+        """明細行の処理とデバッグ画像の作成"""
+        os.makedirs(output_dir, exist_ok=True)
+        if debug_dir:
+            os.makedirs(debug_dir, exist_ok=True)
+
+        # PDFの各ページを画像に変換
+        pages = convert_from_path(pdf_path, dpi=self.dpi)
+        
+        for page_num, page_image in enumerate(pages):
+            # このページの明細を抽出
+            page_details = [d for d in detail_lines if d.page_num == page_num]
+            if not page_details:
+                continue
+
+            # スケール係数を計算
+            scale_factor = page_image.height / self.pdf_height
+            
+            # 明細行の切り出しと保存
+            self._process_page_details(
+                page_image, 
+                page_details, 
+                scale_factor, 
+                output_dir, 
+                page_num,
+                debug_dir
+            )
+
+    def _collect_detail_numbers(self, page_layout: LTPage) -> List[tuple]:
+        """ページ内の明細番号とその位置を収集"""
+        number_positions = []
+        for element in page_layout:
+            if isinstance(element, LTTextContainer):
+                text = element.get_text().strip()
+                detail_no = self._is_detail_number(text)
+                if detail_no:
+                    number_positions.append((detail_no, element.y1, element.y0))
+        return sorted(number_positions, key=lambda x: -x[1])
+
+    def _is_detail_number(self, text: str) -> Optional[str]:
+        """明細番号かどうかを判定する"""
+        patterns = [
+            r'^No.\s*(\d+)\s*$',  # No.10 or No10
+            r'^\s*(\d+)\s*$'      # 10
+        ]
+        for pattern in patterns:
+            match = re.match(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group(1)
+        return None
+
+    def _process_page_details(self, page_image: Image, details: List[DetailLine],
+                            scale_factor: float, output_dir: str, page_num: int,
+                            debug_dir: str = None):
+        """ページ内の明細行を処理"""
+        if debug_dir:
+            debug_image = page_image.copy()
+            debug_draw = ImageDraw.Draw(debug_image)
+
+        for detail in details:
+            # 座標変換
+            coords = self._convert_coordinates(detail, scale_factor)
+            
+            # 明細行の切り出しと保存
+            cropped_image = page_image.crop(coords)
+            output_path = os.path.join(
+                output_dir, 
+                f'page{page_num + 1}_detail{detail.no}.jpg'
+            )
+            cropped_image.save(output_path, 'JPEG', quality=95)
+
+            # デバッグ画像の作成（オプション）
+            if debug_dir:
+                self._draw_debug_info(debug_draw, coords, detail)
+
+        # デバッグ画像の保存
+        if debug_dir:
+            debug_path = os.path.join(debug_dir, f'debug_page_{page_num + 1}.jpg')
+            debug_image.save(debug_path, 'JPEG', quality=95)
 ```
 
 ### 3.6 UIモジュール
