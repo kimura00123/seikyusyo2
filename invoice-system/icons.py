@@ -1,87 +1,68 @@
-from PySide6.QtGui import QIcon, QPainter, QColor, QPixmap
+from PySide6.QtGui import QIcon, QPixmap, QColor, QPainter
 from PySide6.QtCore import Qt, QSize
 
 
 class StatusIcon:
     """ステータスアイコンを生成するクラス"""
 
-    ICON_SIZE = 16  # アイコンサイズ（ピクセル）
+    @staticmethod
+    def create(status: str) -> QIcon:
+        """ステータスに応じたアイコンを生成"""
+        # アイコンのサイズ設定
+        size = QSize(16, 16)
+        pixmap = QPixmap(size)
+        pixmap.fill(Qt.transparent)
 
-    # ステータスごとの色定義
-    COLORS = {
-        "approved": QColor(76, 175, 80),  # 緑色
-        "error": QColor(244, 67, 54),  # 赤色
-        "pending": QColor(33, 150, 243),  # 青色
-        "unconfirmed": QColor(158, 158, 158),  # グレー色
-    }
-
-    @classmethod
-    def create(cls, status: str) -> QIcon:
-        """
-        指定されたステータスに対応するアイコンを生成
-
-        Args:
-            status: ステータス文字列（"approved", "error", "pending", "unconfirmed"）
-
-        Returns:
-            QIcon: 生成されたアイコン
-        """
-        # ピクスマップの作成
-        pixmap = QPixmap(cls.ICON_SIZE, cls.ICON_SIZE)
-        pixmap.fill(Qt.transparent)  # 背景を透明に
-
-        # ペインターの設定
+        # 描画設定
         painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing)  # アンチエイリアシング有効化
+        painter.setRenderHint(QPainter.Antialiasing)
 
-        # 色の取得（未定義の場合はunconfirmedの色を使用）
-        color = cls.COLORS.get(status, cls.COLORS["unconfirmed"])
-
-        # アイコンの描画
+        # ステータスに応じた色とスタイルの設定
         if status == "approved":
-            cls._draw_check_mark(painter, color)
+            # 承認済み: 緑色のチェックマーク
+            color = QColor(76, 175, 80)  # Material Design Green
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(color)
+            painter.drawEllipse(2, 2, 12, 12)
+
+            # チェックマークを描画
+            painter.setPen(Qt.white)
+            painter.drawLine(4, 8, 7, 11)
+            painter.drawLine(7, 11, 12, 5)
+
         elif status == "error":
-            cls._draw_warning(painter, color)
+            # エラー: 赤色の感嘆符
+            color = QColor(244, 67, 54)  # Material Design Red
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(color)
+            painter.drawEllipse(2, 2, 12, 12)
+
+            # 感嘆符を描画
+            painter.setPen(Qt.white)
+            painter.drawLine(8, 4, 8, 9)
+            painter.drawEllipse(7, 10, 2, 2)
+
         elif status == "pending":
-            cls._draw_pending(painter, color)
+            # 処理中: 青色の回転アイコン
+            color = QColor(33, 150, 243)  # Material Design Blue
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(color)
+            painter.drawEllipse(2, 2, 12, 12)
+
+            # 回転アイコンを描画
+            painter.setPen(Qt.white)
+            painter.drawArc(4, 4, 8, 8, 0 * 16, 270 * 16)
+
         else:  # unconfirmed
-            cls._draw_minus(painter, color)
+            # 未確認: グレーの横線
+            color = QColor(158, 158, 158)  # Material Design Grey
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(color)
+            painter.drawEllipse(2, 2, 12, 12)
+
+            # 横線を描画
+            painter.setPen(Qt.white)
+            painter.drawLine(4, 8, 12, 8)
 
         painter.end()
         return QIcon(pixmap)
-
-    @classmethod
-    def _draw_check_mark(cls, painter: QPainter, color: QColor):
-        """チェックマークを描画"""
-        painter.setPen(color)
-        painter.setBrush(Qt.NoBrush)
-        painter.drawLine(4, 8, 7, 11)  # チェックマークの左部分
-        painter.drawLine(7, 11, 12, 5)  # チェックマークの右部分
-
-    @classmethod
-    def _draw_warning(cls, painter: QPainter, color: QColor):
-        """警告マークを描画"""
-        painter.setPen(color)
-        painter.setBrush(Qt.NoBrush)
-        # 三角形を描画
-        painter.drawLine(8, 4, 4, 12)  # 左辺
-        painter.drawLine(4, 12, 12, 12)  # 底辺
-        painter.drawLine(12, 12, 8, 4)  # 右辺
-        # 感嘆符を描画
-        painter.drawLine(8, 7, 8, 9)  # 上部
-        painter.drawPoint(8, 11)  # 下部の点
-
-    @classmethod
-    def _draw_pending(cls, painter: QPainter, color: QColor):
-        """処理中マークを描画"""
-        painter.setPen(color)
-        painter.setBrush(Qt.NoBrush)
-        # 円弧を描画（更新中を表す）
-        painter.drawArc(4, 4, 8, 8, 0, 270 * 16)  # 角度は16分の1度単位
-
-    @classmethod
-    def _draw_minus(cls, painter: QPainter, color: QColor):
-        """マイナスマークを描画"""
-        painter.setPen(color)
-        painter.setBrush(Qt.NoBrush)
-        painter.drawLine(4, 8, 12, 8)  # 水平線
