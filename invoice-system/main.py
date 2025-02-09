@@ -509,8 +509,46 @@ class InvoiceStructuringSystem(QMainWindow):
         layout = QVBoxLayout(right_panel)
 
         # ショートカット情報
-        shortcut_label = QLabel("Alt+↑↓: 移動 Space: 選択 Enter: 承認")
-        layout.addWidget(shortcut_label)
+        shortcut_container = QWidget()
+        shortcut_container.setStyleSheet(
+            """
+            QWidget {
+                background: #e8f5e9;
+                border: 1px solid #c8e6c9;
+                border-radius: 4px;
+                padding: 8px;
+            }
+        """
+        )
+        shortcut_layout = QHBoxLayout(shortcut_container)
+        shortcut_layout.setContentsMargins(8, 4, 8, 4)
+
+        # キーボードアイコン
+        keyboard_icon = QLabel("⌨")
+        keyboard_icon.setStyleSheet(
+            """
+            QLabel {
+                color: #43a047;
+                font-size: 14px;
+            }
+        """
+        )
+        keyboard_icon.setFixedSize(16, 16)
+
+        # ショートカット情報
+        shortcut_label = QLabel("Alt+↑↓: 移動  Space: 選択  Enter: 承認")
+        shortcut_label.setStyleSheet(
+            """
+            QLabel {
+                color: #2e7d32;
+                font-size: 13px;
+            }
+        """
+        )
+
+        shortcut_layout.addWidget(keyboard_icon)
+        shortcut_layout.addWidget(shortcut_label)
+        layout.addWidget(shortcut_container)
 
         # 明細行状態バー
         status_bar = QStatusBar()
