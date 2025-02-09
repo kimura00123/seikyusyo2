@@ -203,6 +203,9 @@ class InvoiceStructuringSystem(QMainWindow):
 
         # 明細一覧
         self.detail_list = QListWidget()
+        self.detail_list.setSelectionMode(
+            QListWidget.ExtendedSelection
+        )  # 複数選択を許可
         self.detail_list.setStyleSheet(
             """
             QListWidget::item {
@@ -353,8 +356,7 @@ class InvoiceStructuringSystem(QMainWindow):
 
     def _select_all_items(self):
         """すべての明細を選択"""
-        for i in range(self.detail_list.count()):
-            self.detail_list.item(i).setSelected(True)
+        self.detail_list.selectAll()  # QListWidgetの組み込みメソッドを使用
         self.status_bar.showMessage("すべての明細を選択しました")
         logger.info("すべての明細を選択しました")
 
@@ -376,6 +378,18 @@ class InvoiceStructuringSystem(QMainWindow):
             self.status_bar.showMessage(f"明細 {no} を承認しました")
             self.detail_status.setText(f"明細 {no} を承認しました")
             logger.info(f"明細を承認しました: {no}")
+
+            # 次の未承認明細を探して移動
+            next_unconfirmed = None
+            current_row = self.detail_list.row(current_item)
+            for i in range(current_row + 1, self.detail_list.count()):
+                item = self.detail_list.item(i)
+                if item.detail_data["status"] not in ["approved", "error"]:
+                    next_unconfirmed = item
+                    break
+
+            if next_unconfirmed:
+                self.detail_list.setCurrentItem(next_unconfirmed)
 
     def _on_filter_changed(self):
         """フィルター変更時の処理"""
