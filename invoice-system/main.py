@@ -118,6 +118,21 @@ class InvoiceStructuringSystem(QMainWindow):
 
         # 明細一覧
         self.detail_list = QListWidget()
+        self.detail_list.setStyleSheet(
+            """
+            QListWidget::item {
+                border-bottom: 1px solid #e0e0e0;
+                padding: 4px;
+            }
+            QListWidget::item:selected {
+                background: #e3f2fd;
+                color: #000000;
+            }
+            QListWidget::item:hover {
+                background: #f5f5f5;
+            }
+        """
+        )
         layout.addWidget(self.detail_list)
 
         # 選択状況と一括承認ボタン
