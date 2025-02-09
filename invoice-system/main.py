@@ -90,7 +90,8 @@ class InvoiceStructuringSystem(QMainWindow):
         main_layout.addWidget(right_panel)
 
         # ステータスバーの設定
-        self.statusBar().showMessage("準備完了")
+        self.status_bar = self.statusBar()
+        self.status_bar.showMessage("準備完了")
 
         # サンプルデータの設定
         self._setup_sample_data()
@@ -165,6 +166,7 @@ class InvoiceStructuringSystem(QMainWindow):
         current_row = self.detail_list.currentRow()
         if current_row > 0:
             self.detail_list.setCurrentRow(current_row - 1)
+            self.status_bar.showMessage("前の明細に移動しました")
             logger.info("前の明細に移動しました")
 
     def _select_next_item(self):
@@ -172,6 +174,7 @@ class InvoiceStructuringSystem(QMainWindow):
         current_row = self.detail_list.currentRow()
         if current_row < self.detail_list.count() - 1:
             self.detail_list.setCurrentRow(current_row + 1)
+            self.status_bar.showMessage("次の明細に移動しました")
             logger.info("次の明細に移動しました")
 
     def _toggle_current_item_selection(self):
@@ -179,19 +182,22 @@ class InvoiceStructuringSystem(QMainWindow):
         current_item = self.detail_list.currentItem()
         if current_item:
             current_item.setSelected(not current_item.isSelected())
-            logger.info(
-                f"明細の選択状態を切り替えました: {current_item.detail_data['no']}"
-            )
+            no = current_item.detail_data["no"]
+            status = "選択" if current_item.isSelected() else "選択解除"
+            self.status_bar.showMessage(f"明細 {no} を{status}しました")
+            logger.info(f"明細の選択状態を切り替えました: {no}")
 
     def _select_all_items(self):
         """すべての明細を選択"""
         for i in range(self.detail_list.count()):
             self.detail_list.item(i).setSelected(True)
+        self.status_bar.showMessage("すべての明細を選択しました")
         logger.info("すべての明細を選択しました")
 
     def _deselect_all_items(self):
         """すべての明細の選択を解除"""
         self.detail_list.clearSelection()
+        self.status_bar.showMessage("すべての明細の選択を解除しました")
         logger.info("すべての明細の選択を解除しました")
 
     def _approve_current_item(self):
@@ -200,15 +206,24 @@ class InvoiceStructuringSystem(QMainWindow):
         if current_item:
             current_item.detail_data["status"] = "approved"
             current_item.update_display()
-            logger.info(f"明細を承認しました: {current_item.detail_data['no']}")
+            no = current_item.detail_data["no"]
+            self.status_bar.showMessage(f"明細 {no} を承認しました")
+            logger.info(f"明細を承認しました: {no}")
 
     def _on_filter_changed(self):
         """フィルター変更時の処理"""
-        logger.info("フィルター条件が変更されました")
+        show_unconfirmed = self.radio_unconfirmed.isChecked()
+        status = "未確認のみ表示" if show_unconfirmed else "すべて表示"
+        self.status_bar.showMessage(f"フィルター: {status}")
+        logger.info(f"フィルター条件が変更されました: {status}")
         self._apply_filters()
 
     def _on_search_text_changed(self, text: str):
         """検索テキスト変更時の処理"""
+        if text:
+            self.status_bar.showMessage(f"検索: {text}")
+        else:
+            self.status_bar.showMessage("検索クリア")
         logger.info(f"検索テキストが変更されました: {text}")
         self._apply_filters()
 
@@ -226,19 +241,24 @@ class InvoiceStructuringSystem(QMainWindow):
         """一括承認処理"""
         selected_items = self.detail_list.selectedItems()
         if not selected_items:
+            self.status_bar.showMessage("承認対象の明細が選択されていません")
             logger.warning("承認対象の明細が選択されていません")
             return
 
-        logger.info(f"{len(selected_items)}件の明細を一括承認します")
+        count = len(selected_items)
+        logger.info(f"{count}件の明細を一括承認します")
         for item in selected_items:
             item.detail_data["status"] = "approved"
             item.update_display()
+
+        self.status_bar.showMessage(f"{count}件の明細を一括承認しました")
 
     def _apply_filters(self):
         """フィルターとサーチを適用"""
         search_text = self.search_box.text().lower()
         show_unconfirmed_only = self.radio_unconfirmed.isChecked()
 
+        visible_count = 0
         for i in range(self.detail_list.count()):
             item = self.detail_list.item(i)
             detail = item.detail_data
@@ -255,11 +275,19 @@ class InvoiceStructuringSystem(QMainWindow):
             )
 
             # アイテムの表示/非表示を設定
-            item.setHidden(not (text_match and status_match))
+            is_visible = text_match and status_match
+            item.setHidden(not is_visible)
+            if is_visible:
+                visible_count += 1
+
+        # フィルター結果をステータスバーに表示
+        if search_text or show_unconfirmed_only:
+            self.status_bar.showMessage(f"フィルター結果: {visible_count}件表示")
 
     def _update_detail_view(self, detail_data: dict):
         """詳細表示の更新"""
         logger.info(f"明細詳細を表示: {detail_data['no']}")
+        self.status_bar.showMessage(f"明細 {detail_data['no']} の詳細を表示中")
 
         # グリッドをクリア
         self.data_grid.setRowCount(0)
