@@ -403,6 +403,9 @@ class InvoiceStructuringSystem(QMainWindow):
         if selected_items:
             item = selected_items[0]
             self._update_detail_view(item.detail_data)
+            self.detail_status.setText(f"明細 {item.detail_data['no']} の詳細を表示中")
+        else:
+            self.detail_status.setText("明細を選択してください")
 
     def _on_bulk_approve(self):
         """一括承認処理"""
@@ -552,8 +555,46 @@ class InvoiceStructuringSystem(QMainWindow):
         layout.addWidget(shortcut_container)
 
         # 明細行状態バー
-        status_bar = QStatusBar()
-        layout.addWidget(status_bar)
+        status_container = QWidget()
+        status_container.setStyleSheet(
+            """
+            QWidget {
+                background: #e3f2fd;
+                border: 1px solid #bbdefb;
+                border-radius: 4px;
+                padding: 4px;
+            }
+        """
+        )
+        status_layout = QHBoxLayout(status_container)
+        status_layout.setContentsMargins(8, 4, 8, 4)
+
+        # ステータスアイコン
+        status_icon = QLabel("ℹ")
+        status_icon.setStyleSheet(
+            """
+            QLabel {
+                color: #1976d2;
+                font-size: 14px;
+            }
+        """
+        )
+        status_icon.setFixedSize(16, 16)
+
+        # ステータス情報
+        self.detail_status = QLabel("明細を選択してください")
+        self.detail_status.setStyleSheet(
+            """
+            QLabel {
+                color: #1976d2;
+                font-size: 13px;
+            }
+        """
+        )
+
+        status_layout.addWidget(status_icon)
+        status_layout.addWidget(self.detail_status)
+        layout.addWidget(status_container)
 
         # クロップ画像表示エリア
         self.image_view = QGraphicsView()
