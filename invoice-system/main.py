@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
 )
 from PySide6.QtCore import Qt, Signal, QSize, QKeyCombination
-from PySide6.QtGui import QIcon, QPixmap, QKeySequence, QShortcut
+from PySide6.QtGui import QIcon, QPixmap, QKeySequence, QShortcut, QColor
 from icons import StatusIcon
 
 
@@ -264,7 +264,7 @@ class InvoiceStructuringSystem(QMainWindow):
         # グリッドをクリア
         self.data_grid.setRowCount(0)
 
-        # データを表示
+        # 基本情報
         fields = [
             ("明細番号", detail_data["no"]),
             ("顧客名", detail_data["customer"]),
@@ -275,13 +275,39 @@ class InvoiceStructuringSystem(QMainWindow):
             ("金額", f"¥{detail_data['quantity'] * detail_data['price']:,}"),
         ]
 
+        # 在庫情報
+        stock = detail_data["stock"]
+        stock_fields = [
+            ("繰越在庫", str(stock["carryover"])),
+            ("入庫数", str(stock["incoming"])),
+            ("出庫数", str(stock["outgoing"])),
+            ("在庫残高", str(stock["balance"])),
+        ]
+        fields.extend(stock_fields)
+
+        # グリッドにデータを表示
         for i, (label, value) in enumerate(fields):
             row = i // 2
             col = (i % 2) * 2
 
-            self.data_grid.insertRow(row)
-            self.data_grid.setItem(row, col, QTableWidgetItem(label))
-            self.data_grid.setItem(row, col + 1, QTableWidgetItem(value))
+            # 行の追加が必要な場合
+            if row >= self.data_grid.rowCount():
+                self.data_grid.insertRow(row)
+
+            # セルの作成と設定
+            label_item = QTableWidgetItem(label)
+            value_item = QTableWidgetItem(value)
+
+            # ラベルセルは編集不可に設定
+            label_item.setFlags(label_item.flags() & ~Qt.ItemIsEditable)
+
+            # 在庫情報のセルの背景色を設定
+            if label in ["繰越在庫", "入庫数", "出庫数", "在庫残高"]:
+                label_item.setBackground(QColor(240, 240, 255))  # 薄い青色
+                value_item.setBackground(QColor(240, 240, 255))
+
+            self.data_grid.setItem(row, col, label_item)
+            self.data_grid.setItem(row, col + 1, value_item)
 
     def _create_right_panel(self):
         right_panel = QWidget()
@@ -310,7 +336,7 @@ class InvoiceStructuringSystem(QMainWindow):
         return right_panel
 
     def _setup_sample_data(self):
-        # サンプルデータ
+        # サンプルデータ（ステータスのバリエーションを含む）
         sample_details = [
             {
                 "id": "1",
@@ -340,6 +366,54 @@ class InvoiceStructuringSystem(QMainWindow):
                 "stock": {
                     "carryover": 150,
                     "incoming": 30,
+                    "outgoing": 40,
+                    "balance": 140,
+                },
+            },
+            {
+                "id": "3",
+                "no": "No.3",
+                "customer": "顧客C",
+                "product": "製品C",
+                "quantity": 150,
+                "price": 1500,
+                "status": "unconfirmed",
+                "tax_rate": 8,
+                "stock": {
+                    "carryover": 80,
+                    "incoming": 40,
+                    "outgoing": 20,
+                    "balance": 100,
+                },
+            },
+            {
+                "id": "4",
+                "no": "No.4",
+                "customer": "顧客D",
+                "product": "製品D",
+                "quantity": 300,
+                "price": 3000,
+                "status": "pending",
+                "tax_rate": 10,
+                "stock": {
+                    "carryover": 200,
+                    "incoming": 100,
+                    "outgoing": 50,
+                    "balance": 250,
+                },
+            },
+            {
+                "id": "5",
+                "no": "No.5",
+                "customer": "顧客E",
+                "product": "製品E",
+                "quantity": 250,
+                "price": 2500,
+                "status": "unconfirmed",
+                "tax_rate": 8,
+                "stock": {
+                    "carryover": 120,
+                    "incoming": 60,
                     "outgoing": 40,
                     "balance": 140,
                 },
