@@ -519,13 +519,23 @@ class InvoiceStructuringSystem(QMainWindow):
             label_item = QTableWidgetItem(label)
             value_item = QTableWidgetItem(value)
 
-            # ラベルセルは編集不可に設定
-            label_item.setFlags(label_item.flags() & ~Qt.ItemIsEditable)
+            # ラベルセルは編集不可かつタブストップなしに設定
+            label_item.setFlags(Qt.ItemIsEnabled)
+            # 値のセルは編集可能でタブストップありに設定
+            value_item.setFlags(
+                Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable
+            )
+
+            # 項目セルの背景色を設定（薄いグレー）
+            label_item.setBackground(QColor(245, 245, 245))
 
             # 在庫情報のセルの背景色を設定
             if label in ["繰越在庫", "入庫数", "出庫数", "在庫残高"]:
-                label_item.setBackground(QColor(240, 240, 255))  # 薄い青色
-                value_item.setBackground(QColor(240, 240, 255))
+                label_item.setBackground(QColor(235, 235, 245))  # より濃い青色
+                value_item.setBackground(QColor(240, 240, 255))  # 薄い青色
+
+            # 元の値を保存（修正検知用）
+            value_item.setData(Qt.UserRole, value)
 
             self.data_grid.setItem(row, col, label_item)
             self.data_grid.setItem(row, col + 1, value_item)
@@ -696,6 +706,9 @@ class InvoiceStructuringSystem(QMainWindow):
         self.data_grid.setColumnCount(4)
         self.data_grid.setHorizontalHeaderLabels(["項目", "値", "項目", "値"])
         self.data_grid.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+        # セルの変更を検知
+        self.data_grid.itemChanged.connect(self._on_cell_changed)
         self.data_grid.setStyleSheet(
             """
             QTableWidget {
@@ -726,6 +739,22 @@ class InvoiceStructuringSystem(QMainWindow):
         layout.addWidget(self.data_grid)
 
         return right_panel
+
+    def _on_cell_changed(self, item: QTableWidgetItem):
+        """セルの値が変更された時の処理"""
+        if not item:
+            return
+
+        # 値のセルの場合のみ処理（偶数列）
+        if item.column() % 2 == 1:
+            original_value = item.data(Qt.UserRole)
+            current_value = item.text()
+
+            # 値が変更された場合は背景色を変更
+            if original_value != current_value:
+                item.setBackground(QColor(255, 243, 224))  # 薄いオレンジ色
+            else:
+                item.setBackground(QColor(255, 255, 255))  # 白色
 
     def _setup_sample_data(self):
         # サンプルデータ（ステータスのバリエーションを含む）
