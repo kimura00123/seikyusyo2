@@ -1,4 +1,6 @@
 import sys
+import logging
+from pathlib import Path
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -23,6 +25,20 @@ from PySide6.QtGui import QIcon, QPixmap
 from icons import StatusIcon
 
 
+# ログ設定
+log_dir = Path("logs")
+log_dir.mkdir(exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler(log_dir / "invoice_system.log", encoding="utf-8"),
+        logging.StreamHandler(),
+    ],
+)
+logger = logging.getLogger(__name__)
+
+
 class DetailListItem(QListWidgetItem):
     def __init__(self, detail_data):
         super().__init__()
@@ -44,6 +60,7 @@ class DetailListItem(QListWidgetItem):
 class InvoiceStructuringSystem(QMainWindow):
     def __init__(self):
         super().__init__()
+        logger.info("アプリケーションを起動しています...")
         self.setWindowTitle("請求書構造化システム")
         self.setMinimumSize(1280, 720)
 
@@ -168,10 +185,15 @@ class InvoiceStructuringSystem(QMainWindow):
 
 
 def main():
-    app = QApplication(sys.argv)
-    window = InvoiceStructuringSystem()
-    window.show()
-    sys.exit(app.exec())
+    try:
+        logger.info("アプリケーションのメイン処理を開始します")
+        app = QApplication(sys.argv)
+        window = InvoiceStructuringSystem()
+        window.show()
+        logger.info("メインウィンドウを表示しました")
+        sys.exit(app.exec())
+    except Exception as e:
+        logger.error(f"予期せぬエラーが発生しました: {e}", exc_info=True)
 
 
 if __name__ == "__main__":
