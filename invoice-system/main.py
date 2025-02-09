@@ -28,15 +28,27 @@ from icons import StatusIcon
 # ログ設定
 log_dir = Path("logs")
 log_dir.mkdir(exist_ok=True)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(log_dir / "invoice_system.log", encoding="utf-8"),
-        logging.StreamHandler(),
-    ],
+
+# ファイルハンドラの設定
+file_handler = logging.FileHandler(log_dir / "invoice_system.log", encoding="utf-8")
+file_handler.setFormatter(
+    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 )
+
+# コンソールハンドラの設定
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(
+    logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+)
+
+# ロガーの設定
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
+
+# 既存のハンドラをクリア（重複を防ぐため）
+logging.getLogger().handlers.clear()
 
 
 class DetailListItem(QListWidgetItem):
