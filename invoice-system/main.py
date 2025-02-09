@@ -20,8 +20,8 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QHeaderView,
 )
-from PySide6.QtCore import Qt, Signal, QSize
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtCore import Qt, Signal, QSize, QKeyCombination
+from PySide6.QtGui import QIcon, QPixmap, QKeySequence, QShortcut
 from icons import StatusIcon
 
 
@@ -132,7 +132,75 @@ class InvoiceStructuringSystem(QMainWindow):
         self.search_box.textChanged.connect(self._on_search_text_changed)
         self.detail_list.itemSelectionChanged.connect(self._on_selection_changed)
 
+        # ショートカットの設定
+        self._setup_shortcuts()
+
         return left_panel
+
+    def _setup_shortcuts(self):
+        """キーボードショートカットの設定"""
+        # 移動ショートカット
+        QShortcut(
+            QKeySequence(Qt.AltModifier | Qt.Key_Up), self, self._select_previous_item
+        )
+        QShortcut(
+            QKeySequence(Qt.AltModifier | Qt.Key_Down), self, self._select_next_item
+        )
+
+        # 選択ショートカット
+        QShortcut(QKeySequence(Qt.Key_Space), self, self._toggle_current_item_selection)
+        QShortcut(QKeySequence(Qt.AltModifier | Qt.Key_A), self, self._select_all_items)
+        QShortcut(
+            QKeySequence(Qt.AltModifier | Qt.Key_D), self, self._deselect_all_items
+        )
+
+        # 承認ショートカット
+        QShortcut(QKeySequence(Qt.Key_Return), self, self._approve_current_item)
+        QShortcut(
+            QKeySequence(Qt.AltModifier | Qt.Key_Return), self, self._on_bulk_approve
+        )
+
+    def _select_previous_item(self):
+        """前の明細を選択"""
+        current_row = self.detail_list.currentRow()
+        if current_row > 0:
+            self.detail_list.setCurrentRow(current_row - 1)
+            logger.info("前の明細に移動しました")
+
+    def _select_next_item(self):
+        """次の明細を選択"""
+        current_row = self.detail_list.currentRow()
+        if current_row < self.detail_list.count() - 1:
+            self.detail_list.setCurrentRow(current_row + 1)
+            logger.info("次の明細に移動しました")
+
+    def _toggle_current_item_selection(self):
+        """現在の明細の選択状態を切り替え"""
+        current_item = self.detail_list.currentItem()
+        if current_item:
+            current_item.setSelected(not current_item.isSelected())
+            logger.info(
+                f"明細の選択状態を切り替えました: {current_item.detail_data['no']}"
+            )
+
+    def _select_all_items(self):
+        """すべての明細を選択"""
+        for i in range(self.detail_list.count()):
+            self.detail_list.item(i).setSelected(True)
+        logger.info("すべての明細を選択しました")
+
+    def _deselect_all_items(self):
+        """すべての明細の選択を解除"""
+        self.detail_list.clearSelection()
+        logger.info("すべての明細の選択を解除しました")
+
+    def _approve_current_item(self):
+        """現在の明細を承認"""
+        current_item = self.detail_list.currentItem()
+        if current_item:
+            current_item.detail_data["status"] = "approved"
+            current_item.update_display()
+            logger.info(f"明細を承認しました: {current_item.detail_data['no']}")
 
     def _on_filter_changed(self):
         """フィルター変更時の処理"""
