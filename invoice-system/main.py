@@ -158,7 +158,47 @@ class InvoiceStructuringSystem(QMainWindow):
         # 検索ボックス
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("顧客名または商品名で検索...")
-        layout.addWidget(self.search_box)
+        self.search_box.setStyleSheet(
+            """
+            QLineEdit {
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+                padding: 8px;
+                padding-left: 32px;  /* アイコンのスペース */
+                background: white;
+                font-size: 13px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #1976d2;
+                background: #e3f2fd;
+            }
+            QLineEdit:hover {
+                border: 1px solid #1976d2;
+            }
+        """
+        )
+
+        # 検索ボックスコンテナ（アイコン表示用）
+        search_container = QWidget()
+        search_layout = QHBoxLayout(search_container)
+        search_layout.setContentsMargins(8, 0, 8, 0)
+        search_layout.setSpacing(0)
+
+        # 検索アイコン
+        search_icon = QLabel()
+        search_icon.setFixedSize(16, 16)
+        search_icon.setStyleSheet(
+            """
+            QLabel {
+                color: #757575;
+            }
+        """
+        )
+        search_icon.setText("🔍")
+
+        search_layout.addWidget(search_icon)
+        search_layout.addWidget(self.search_box)
+        layout.addWidget(search_container)
 
         # 明細一覧
         self.detail_list = QListWidget()
