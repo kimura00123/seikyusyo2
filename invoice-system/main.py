@@ -219,9 +219,48 @@ class InvoiceStructuringSystem(QMainWindow):
         )
         layout.addWidget(self.detail_list)
 
-        # 選択状況と一括承認ボタン
+        # 選択状況
+        selection_container = QWidget()
+        selection_container.setStyleSheet(
+            """
+            QWidget {
+                background: #f5f5f5;
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+                padding: 4px;
+            }
+        """
+        )
+        selection_layout = QHBoxLayout(selection_container)
+        selection_layout.setContentsMargins(8, 4, 8, 4)
+
+        # 選択アイコン
+        selection_icon = QLabel("✓")
+        selection_icon.setStyleSheet(
+            """
+            QLabel {
+                color: #1976d2;
+                font-weight: bold;
+                font-size: 14px;
+            }
+        """
+        )
+        selection_icon.setFixedSize(16, 16)
+
+        # 選択情報
         self.selection_info = QLabel("選択: 0/0件")
-        layout.addWidget(self.selection_info)
+        self.selection_info.setStyleSheet(
+            """
+            QLabel {
+                color: #424242;
+                font-size: 13px;
+            }
+        """
+        )
+
+        selection_layout.addWidget(selection_icon)
+        selection_layout.addWidget(self.selection_info)
+        layout.addWidget(selection_container)
 
         # 一括承認ボタン
         self.bulk_approve_btn = QPushButton("一括承認")
