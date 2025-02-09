@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QStatusBar,
     QGraphicsView,
+    QGraphicsScene,
     QTableWidget,
     QTableWidgetItem,
     QHeaderView,
