@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QIcon, QPixmap
+from icons import StatusIcon
 
 
 class DetailListItem(QListWidgetItem):
@@ -36,8 +37,8 @@ class DetailListItem(QListWidgetItem):
         )
         self.setText(display_text)
 
-        # ステータスに応じたアイコンを設定（実際のアイコンは後で実装）
-        # self.setIcon(self._get_status_icon())
+        # ステータスに応じたアイコンを設定
+        self.setIcon(StatusIcon.create(self.detail_data["status"]))
 
 
 class InvoiceStructuringSystem(QMainWindow):
