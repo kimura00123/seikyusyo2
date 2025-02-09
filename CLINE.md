@@ -977,7 +977,21 @@ class LogManager:
 - 表示言語：日本語
 - 実行環境：Python 3.10以上、PySide6
 
-#### 10.0.2 バリデーションワークフロー
+#### 10.0.2 主要機能
+1. インラインエディティング機能
+   - 構造化データグリッド内での直接編集
+   - ダブルクリックで編集モード開始
+   - Tab/Enterキーで次のセルに移動
+   - ESCキーで編集キャンセル
+   - 編集内容のリアルタイムバリデーション
+
+2. 検索機能
+   - 左パネルでの明細行検索
+   - 顧客名と商品名での部分一致検索
+   - リアルタイムフィルタリング
+   - 検索結果のハイライト表示
+
+#### 10.0.3 バリデーションワークフロー
 1. 明細行の表示と選択
    - サイドパネルからの明細選択
    - キーボードショートカットによる移動
@@ -999,7 +1013,7 @@ class LogManager:
    - データの最終検証
    - 確定処理の実行
 
-#### 10.0.3 画面遷移フロー
+#### 10.0.4 画面遷移フロー
 ```
 [PDFアップロード] → [明細一覧表示] → [明細確認・修正] → [承認] → [確定]
 ```
@@ -1009,9 +1023,12 @@ class LogManager:
 #### 10.1.1 画面レイアウト概要
 ```
 +--------------------+--------------------------------+
-|  [フィルター]      |  [ショートカット表示]          |
-|  ○ すべて         |  Alt+↑↓: 移動                  |
-|  ○ 未確認のみ     |  Space: 選択  Enter: 承認      |
+|  [検索]           |  [ショートカット表示]          |
+|  🔍 ____________  |  Alt+↑↓: 移動                  |
++--------------------+  Space: 選択  Enter: 承認      |
+|  [フィルター]      |                               |
+|  ○ すべて         |                               |
+|  ○ 未確認のみ     |                               |
 +--------------------+--------------------------------+
 |  明細行一覧        |  [明細行状態バー]              |
 |  [幅: 250px]      |                                |
@@ -1019,15 +1036,16 @@ class LogManager:
 |  [✓] No.1  ✓      |    + - □                      |
 |      製品A         |                                |
 |      100×¥1,000   |  [構造化データグリッド]        |
-|                    |  +----------+----------+      |
-|  [ ] No.2  ⚠      |  |明細番号  |商品名   |      |
-|      製品B         |  |[No.1]    |[製品A]  |      |
-|      200×¥2,000   |  +----------+----------+      |
-|                    |                                |
-+--------------------+                                |
-|  選択: 2/10件      |                                |
-|  [一括承認]        |                                |
-+--------------------+--------------------------------+
+|                    |  +----------+----------+----------+----------+
+|  [ ] No.2  ⚠      |  |明細番号: |No.1     |商品名:   |製品A    |
+|      製品B         |  +----------+----------+----------+----------+
+|      200×¥2,000   |  |数量:     |100      |単価:     |¥1,000   |
+|                    |  +----------+----------+----------+----------+
++--------------------+  |税率:     |10%      |金額:     |¥100,000 |
+|  選択: 2/10件      |  +----------+----------+----------+----------+
+|  [一括承認]        |  |在庫情報:                                 |
++--------------------+  |  繰越: 100  入庫: 50  出庫: 30  残高: 120|
+                       +------------------------------------------+
 ```
 
 #### 10.1.2 Qt実装コード
@@ -1112,7 +1130,11 @@ class MainWindow(QMainWindow):
   - － 未確認（QColor(158, 158, 158)）
 
 #### 10.2.2 構造化データ表示（QTableWidget）
-- カスタムデリゲートによるグリッド表示
+- インラインエディティング機能
+  - QTableWidgetItemのフラグ設定（ItemIsEditable）
+  - カスタムデリゲートによる編集制御
+  - 入力バリデーション（数値制限、文字数制限）
+  - 編集状態の視覚的フィードバック
 - フィールド状態の視覚的表現（QColor）
   - 未修正：白背景（Qt::white）
   - ユーザー修正済：薄い青背景（QColor(227, 242, 253)）
@@ -1149,6 +1171,91 @@ class MainWindow(QMainWindow):
 - Ctrl + '0': 実寸表示
 
 ### 10.4 データ連動仕様
+
+#### 10.4.1 検索機能
+```python
+class SearchableListWidget(QListWidget):
+    def __init__(self):
+        super().__init__()
+        self._setup_search()
+
+    def _setup_search(self):
+        """検索機能のセットアップ"""
+        # 検索バー
+        self.search_bar = QLineEdit()
+        self.search_bar.setPlaceholderText("顧客名/商品名で検索...")
+        self.search_bar.textChanged.connect(self._on_search_text_changed)
+
+        # 検索インデックス
+        self._search_index = {
+            'customer': defaultdict(list),  # 顧客名 → 明細行
+            'product': defaultdict(list)    # 商品名 → 明細行
+        }
+
+    def _on_search_text_changed(self, text: str):
+        """検索テキスト変更時の処理"""
+        if not text:
+            self._reset_filter()
+            return
+
+        # 検索実行
+        matches = self._search_items(text.lower())
+        self._apply_filter(matches)
+        self._highlight_matches(matches)
+
+    def _search_items(self, query: str) -> Set[QListWidgetItem]:
+        """検索実行"""
+        matches = set()
+        for field in ['customer', 'product']:
+            for key, items in self._search_index[field].items():
+                if query in key.lower():
+                    matches.update(items)
+        return matches
+```
+
+#### 10.4.2 インラインエディティング
+```python
+class EditableTableWidget(QTableWidget):
+    # 編集完了シグナル
+    edit_completed = Signal(str, str, str)  # field_name, old_value, new_value
+    
+    def __init__(self):
+        super().__init__()
+        self._setup_editing()
+
+    def _setup_editing(self):
+        """編集機能のセットアップ"""
+        # 編集モード設定
+        self.setEditTriggers(QAbstractItemView.DoubleClicked)
+        
+        # バリデータ設定
+        self._setup_validators()
+        
+        # 編集完了イベント接続
+        self.itemChanged.connect(self._on_item_edited)
+
+    def _setup_validators(self):
+        """フィールド別バリデータ設定"""
+        self.validators = {
+            'quantity': QIntValidator(0, 999999),
+            'unit_price': QDoubleValidator(0, 999999999.99, 2),
+            'amount': QDoubleValidator(0, 999999999.99, 2)
+        }
+
+    def _on_item_edited(self, item: QTableWidgetItem):
+        """編集完了時の処理"""
+        if not self._validate_edit(item):
+            return
+
+        field_name = self.horizontalHeaderItem(item.column()).text()
+        old_value = item.data(Qt.UserRole)
+        new_value = item.text()
+
+        # 編集完了シグナル発行
+        self.edit_completed.emit(field_name, old_value, new_value)
+```
+
+#### 10.4.3 明細行選択時の動作
 
 #### 10.4.1 明細行選択時の動作
 1. 明細行選択
