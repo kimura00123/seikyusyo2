@@ -108,12 +108,100 @@ class InvoiceStructuringSystem(QMainWindow):
         layout.addWidget(self.detail_list)
 
         # 選択状況と一括承認ボタン
-        selection_info = QLabel("選択: 0/0件")
-        layout.addWidget(selection_info)
-        bulk_approve_btn = QPushButton("一括承認")
-        layout.addWidget(bulk_approve_btn)
+        self.selection_info = QLabel("選択: 0/0件")
+        layout.addWidget(self.selection_info)
+        self.bulk_approve_btn = QPushButton("一括承認")
+        self.bulk_approve_btn.clicked.connect(self._on_bulk_approve)
+        layout.addWidget(self.bulk_approve_btn)
+
+        # シグナル接続
+        self.radio_all.toggled.connect(self._on_filter_changed)
+        self.radio_unconfirmed.toggled.connect(self._on_filter_changed)
+        self.search_box.textChanged.connect(self._on_search_text_changed)
+        self.detail_list.itemSelectionChanged.connect(self._on_selection_changed)
 
         return left_panel
+
+    def _on_filter_changed(self):
+        """フィルター変更時の処理"""
+        logger.info("フィルター条件が変更されました")
+        self._apply_filters()
+
+    def _on_search_text_changed(self, text: str):
+        """検索テキスト変更時の処理"""
+        logger.info(f"検索テキストが変更されました: {text}")
+        self._apply_filters()
+
+    def _on_selection_changed(self):
+        """明細選択変更時の処理"""
+        selected_items = self.detail_list.selectedItems()
+        total_items = self.detail_list.count()
+        self.selection_info.setText(f"選択: {len(selected_items)}/{total_items}件")
+
+        if selected_items:
+            item = selected_items[0]
+            self._update_detail_view(item.detail_data)
+
+    def _on_bulk_approve(self):
+        """一括承認処理"""
+        selected_items = self.detail_list.selectedItems()
+        if not selected_items:
+            logger.warning("承認対象の明細が選択されていません")
+            return
+
+        logger.info(f"{len(selected_items)}件の明細を一括承認します")
+        for item in selected_items:
+            item.detail_data["status"] = "approved"
+            item.update_display()
+
+    def _apply_filters(self):
+        """フィルターとサーチを適用"""
+        search_text = self.search_box.text().lower()
+        show_unconfirmed_only = self.radio_unconfirmed.isChecked()
+
+        for i in range(self.detail_list.count()):
+            item = self.detail_list.item(i)
+            detail = item.detail_data
+
+            # 検索テキストでフィルタリング
+            text_match = (
+                search_text in detail["customer"].lower()
+                or search_text in detail["product"].lower()
+            )
+
+            # 状態でフィルタリング
+            status_match = (
+                not show_unconfirmed_only or detail["status"] == "unconfirmed"
+            )
+
+            # アイテムの表示/非表示を設定
+            item.setHidden(not (text_match and status_match))
+
+    def _update_detail_view(self, detail_data: dict):
+        """詳細表示の更新"""
+        logger.info(f"明細詳細を表示: {detail_data['no']}")
+
+        # グリッドをクリア
+        self.data_grid.setRowCount(0)
+
+        # データを表示
+        fields = [
+            ("明細番号", detail_data["no"]),
+            ("顧客名", detail_data["customer"]),
+            ("商品名", detail_data["product"]),
+            ("数量", str(detail_data["quantity"])),
+            ("単価", f"¥{detail_data['price']:,}"),
+            ("税率", f"{detail_data['tax_rate']}%"),
+            ("金額", f"¥{detail_data['quantity'] * detail_data['price']:,}"),
+        ]
+
+        for i, (label, value) in enumerate(fields):
+            row = i // 2
+            col = (i % 2) * 2
+
+            self.data_grid.insertRow(row)
+            self.data_grid.setItem(row, col, QTableWidgetItem(label))
+            self.data_grid.setItem(row, col + 1, QTableWidgetItem(value))
 
     def _create_right_panel(self):
         right_panel = QWidget()
