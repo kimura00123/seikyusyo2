@@ -561,6 +561,9 @@ class InvoiceStructuringSystem(QMainWindow):
         )
         keyboard_icon.setFixedSize(16, 16)
 
+        # ショートカット情報とステータスアイコンの説明
+        info_layout = QVBoxLayout()
+
         # ショートカット情報
         shortcut_label = QLabel("Alt+↑↓: 移動  Space: 選択  Enter: 承認")
         shortcut_label.setStyleSheet(
@@ -572,8 +575,24 @@ class InvoiceStructuringSystem(QMainWindow):
         """
         )
 
+        # ステータスアイコンの説明
+        status_info = QLabel("✓: 承認済み  ⚠: エラー  ⟳: 確認中  －: 未確認")
+        status_info.setStyleSheet(
+            """
+            QLabel {
+                color: #2e7d32;
+                font-size: 13px;
+                margin-top: 4px;
+            }
+        """
+        )
+
+        info_layout.addWidget(shortcut_label)
+        info_layout.addWidget(status_info)
+        info_layout.setSpacing(2)
+
         shortcut_layout.addWidget(keyboard_icon)
-        shortcut_layout.addWidget(shortcut_label)
+        shortcut_layout.addLayout(info_layout)
         layout.addWidget(shortcut_container)
 
         # 明細行状態バー
