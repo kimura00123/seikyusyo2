@@ -368,10 +368,13 @@ class InvoiceStructuringSystem(QMainWindow):
         """現在の明細を承認"""
         current_item = self.detail_list.currentItem()
         if current_item:
+            no = current_item.detail_data["no"]
             current_item.detail_data["status"] = "approved"
             current_item.update_display()
-            no = current_item.detail_data["no"]
+
+            # ステータスメッセージを更新
             self.status_bar.showMessage(f"明細 {no} を承認しました")
+            self.detail_status.setText(f"明細 {no} を承認しました")
             logger.info(f"明細を承認しました: {no}")
 
     def _on_filter_changed(self):
@@ -418,11 +421,16 @@ class InvoiceStructuringSystem(QMainWindow):
 
         count = len(selected_items)
         logger.info(f"{count}件の明細を一括承認します")
+
+        # 一括承認処理
         for item in selected_items:
             item.detail_data["status"] = "approved"
             item.update_display()
 
-        self.status_bar.showMessage(f"{count}件の明細を一括承認しました")
+        # ステータスメッセージを更新
+        status_message = f"{count}件の明細を一括承認しました"
+        self.status_bar.showMessage(status_message)
+        self.detail_status.setText(status_message)
 
     def _apply_filters(self):
         """フィルターとサーチを適用"""
