@@ -564,6 +564,33 @@ class InvoiceStructuringSystem(QMainWindow):
         self.data_grid.setColumnCount(4)
         self.data_grid.setHorizontalHeaderLabels(["項目", "値", "項目", "値"])
         self.data_grid.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.data_grid.setStyleSheet(
+            """
+            QTableWidget {
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+                background: white;
+            }
+            QHeaderView::section {
+                background: #f5f5f5;
+                padding: 8px;
+                border: none;
+                border-right: 1px solid #e0e0e0;
+                border-bottom: 1px solid #e0e0e0;
+                font-weight: bold;
+                color: #424242;
+            }
+            QTableWidget::item {
+                padding: 8px;
+                border: none;
+                border-bottom: 1px solid #e0e0e0;
+            }
+            QTableWidget::item:selected {
+                background: #e3f2fd;
+                color: #000000;
+            }
+        """
+        )
         layout.addWidget(self.data_grid)
 
         return right_panel
