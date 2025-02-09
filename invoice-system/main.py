@@ -103,10 +103,54 @@ class InvoiceStructuringSystem(QMainWindow):
 
         # フィルターグループ
         filter_group = QGroupBox("フィルター")
+        filter_group.setStyleSheet(
+            """
+            QGroupBox {
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+                margin-top: 1em;
+                padding-top: 0.5em;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 8px;
+                padding: 0 3px;
+                background: white;
+                color: #1976d2;
+                font-weight: bold;
+            }
+        """
+        )
         filter_layout = QVBoxLayout(filter_group)
+        filter_layout.setContentsMargins(8, 8, 8, 8)
+        filter_layout.setSpacing(4)
+
+        # ラジオボタンのスタイル設定
+        radio_style = """
+            QRadioButton {
+                padding: 4px;
+            }
+            QRadioButton::indicator {
+                width: 16px;
+                height: 16px;
+                border: 2px solid #bdbdbd;
+                border-radius: 8px;
+            }
+            QRadioButton::indicator:checked {
+                border: 2px solid #1976d2;
+                background-color: #1976d2;
+            }
+            QRadioButton::indicator:unchecked:hover {
+                border: 2px solid #1976d2;
+            }
+        """
+
         self.radio_all = QRadioButton("すべて")
         self.radio_unconfirmed = QRadioButton("未確認のみ")
+        self.radio_all.setStyleSheet(radio_style)
+        self.radio_unconfirmed.setStyleSheet(radio_style)
         self.radio_all.setChecked(True)
+
         filter_layout.addWidget(self.radio_all)
         filter_layout.addWidget(self.radio_unconfirmed)
         layout.addWidget(filter_group)
