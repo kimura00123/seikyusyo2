@@ -138,8 +138,33 @@ class InvoiceStructuringSystem(QMainWindow):
         # 選択状況と一括承認ボタン
         self.selection_info = QLabel("選択: 0/0件")
         layout.addWidget(self.selection_info)
+
+        # 一括承認ボタン
         self.bulk_approve_btn = QPushButton("一括承認")
+        self.bulk_approve_btn.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #1976d2;
+                color: white;
+                border: none;
+                padding: 8px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1565c0;
+            }
+            QPushButton:pressed {
+                background-color: #0d47a1;
+            }
+            QPushButton:disabled {
+                background-color: #bbdefb;
+                color: #90caf9;
+            }
+        """
+        )
         self.bulk_approve_btn.clicked.connect(self._on_bulk_approve)
+        self.bulk_approve_btn.setEnabled(False)  # 初期状態は無効
         layout.addWidget(self.bulk_approve_btn)
 
         # シグナル接続
@@ -248,6 +273,9 @@ class InvoiceStructuringSystem(QMainWindow):
         total_items = self.detail_list.count()
         self.selection_info.setText(f"選択: {len(selected_items)}/{total_items}件")
 
+        # 一括承認ボタンの有効/無効を切り替え
+        self.bulk_approve_btn.setEnabled(len(selected_items) > 0)
+
         if selected_items:
             item = selected_items[0]
             self._update_detail_view(item.detail_data)
@@ -258,6 +286,7 @@ class InvoiceStructuringSystem(QMainWindow):
         if not selected_items:
             self.status_bar.showMessage("承認対象の明細が選択されていません")
             logger.warning("承認対象の明細が選択されていません")
+            self.bulk_approve_btn.setEnabled(False)
             return
 
         count = len(selected_items)
