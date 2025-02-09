@@ -557,6 +557,55 @@ class InvoiceStructuringSystem(QMainWindow):
         # クロップ画像表示エリア
         self.image_view = QGraphicsView()
         self.image_view.setMinimumHeight(200)
+        self.image_view.setStyleSheet(
+            """
+            QGraphicsView {
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+                background: #fafafa;
+            }
+        """
+        )
+
+        # 画像表示エリアのプレースホルダー
+        placeholder_container = QWidget()
+        placeholder_container.setStyleSheet(
+            """
+            QWidget {
+                background: transparent;
+            }
+        """
+        )
+        placeholder_layout = QVBoxLayout(placeholder_container)
+        placeholder_layout.setAlignment(Qt.AlignCenter)
+
+        # プレースホルダーアイコン
+        placeholder_icon = QLabel("📄")
+        placeholder_icon.setStyleSheet(
+            """
+            QLabel {
+                color: #bdbdbd;
+                font-size: 32px;
+            }
+        """
+        )
+        placeholder_layout.addWidget(placeholder_icon, alignment=Qt.AlignCenter)
+
+        # プレースホルダーテキスト
+        placeholder_text = QLabel("明細画像")
+        placeholder_text.setStyleSheet(
+            """
+            QLabel {
+                color: #757575;
+                font-size: 13px;
+            }
+        """
+        )
+        placeholder_layout.addWidget(placeholder_text, alignment=Qt.AlignCenter)
+
+        # プレースホルダーをビューに設定
+        self.image_view.setScene(QGraphicsScene())
+        self.image_view.scene().addWidget(placeholder_container)
         layout.addWidget(self.image_view)
 
         # 構造化データグリッド
