@@ -323,7 +323,11 @@ class InvoiceStructuringSystem(QMainWindow):
         )
 
         # 承認ショートカット
-        QShortcut(QKeySequence(Qt.Key_Return), self, self._approve_current_item)
+        QShortcut(
+            QKeySequence(Qt.ControlModifier | Qt.Key_Return),
+            self,
+            self._approve_current_item,
+        )
         QShortcut(
             QKeySequence(Qt.AltModifier | Qt.Key_Return), self, self._on_bulk_approve
         )
@@ -575,7 +579,7 @@ class InvoiceStructuringSystem(QMainWindow):
         info_layout = QVBoxLayout()
 
         # ショートカット情報
-        shortcut_label = QLabel("Alt+↑↓: 移動  Space: 選択  Enter: 承認")
+        shortcut_label = QLabel("Alt+↑↓: 移動  Space: 選択  Ctrl+Enter: 承認")
         shortcut_label.setStyleSheet(
             """
             QLabel {
