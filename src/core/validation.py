@@ -134,8 +134,13 @@ class Validator:
 
     def __init__(self):
         self.rules = ValidationRule()
+        self._validation_cache = (
+            {}
+        )  # ドキュメントIDごとのバリデーション結果をキャッシュ
 
-    def validate(self, data: DocumentStructure) -> ValidationResult:
+    def validate(
+        self, data: DocumentStructure, document_id: Optional[str] = None
+    ) -> ValidationResult:
         """
         データを検証する
 
@@ -209,10 +214,44 @@ class Validator:
                     f"バリデーションエラー: {len(errors)}件のエラー, {len(warnings)}件の警告"
                 )
 
+            # バリデーション結果をキャッシュ
+            if document_id:
+                self._validation_cache[document_id] = result
+                logger.info(f"バリデーション結果をキャッシュ: {document_id}")
+
             return result
 
         except Exception as e:
             logger.error(f"バリデーションでエラー: {e}", exc_info=True)
+            raise
+
+    def get_validation_result(self, document_id: str) -> Optional[Dict]:
+        """
+        キャッシュされたバリデーション結果を取得する
+
+        Args:
+            document_id (str): ドキュメントID
+
+        Returns:
+            Optional[Dict]: バリデーション結果。存在しない場合はNone
+        """
+        try:
+            if document_id in self._validation_cache:
+                result = self._validation_cache[document_id]
+                return {
+                    "is_valid": result.is_valid,
+                    "errors": [
+                        {"field": e.field, "message": e.message} for e in result.errors
+                    ],
+                    "warnings": [
+                        {"field": w.field, "message": w.message}
+                        for w in result.warnings
+                    ],
+                }
+            return None
+
+        except Exception as e:
+            logger.error(f"バリデーション結果の取得でエラー: {e}", exc_info=True)
             raise
 
     def _normalize_data(self, data: DocumentStructure) -> DocumentStructure:
