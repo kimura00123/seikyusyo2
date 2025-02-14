@@ -27,7 +27,7 @@ app.add_middleware(
 
 # ルーターの登録
 app.include_router(
-    document.router,
+    document,
     prefix="/api/documents",
     tags=["documents"],
 )

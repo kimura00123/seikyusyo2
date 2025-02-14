@@ -13,8 +13,8 @@ from pdfminer.layout import (
     LTTextLineHorizontal,
     LTTextBoxHorizontal,
 )
-from ..utils.logger import get_logger
-from ..utils.config import Config
+from utils.logger import get_logger
+from utils.config import Config
 
 logger = get_logger(__name__)
 

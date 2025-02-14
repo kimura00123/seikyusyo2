@@ -71,11 +71,18 @@ class Config:
         Returns:
             bool: 検証結果
         """
-        required_vars = [
-            "AZURE_OPENAI_API_KEY",
-            "AZURE_OPENAI_ENDPOINT",
-            "AZURE_OPENAI_DEPLOYMENT_NAME",
-        ]
+        # 基本設定の検証
+        required_vars = []
+
+        # 本番環境の場合はAzure OpenAI APIの設定を検証
+        if cls.is_production():
+            required_vars.extend(
+                [
+                    "AZURE_OPENAI_API_KEY",
+                    "AZURE_OPENAI_ENDPOINT",
+                    "AZURE_OPENAI_DEPLOYMENT_NAME",
+                ]
+            )
 
         missing_vars = [var for var in required_vars if not getattr(cls, var)]
 

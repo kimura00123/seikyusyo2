@@ -72,20 +72,18 @@ def main():
             sys.exit(1)
 
         # APIサーバーの起動
-        from api import app
         import uvicorn
 
         host = "0.0.0.0"
-        port = int(os.getenv("PORT", "8000"))
+        port = int(Config.get("PORT", "8000"))
         reload = Config.is_development()
 
         logger.info(f"APIサーバーを起動: {host}:{port}")
-        uvicorn.run(app, host=host, port=port, reload=reload)
+        uvicorn.run("api.main:app", host=host, port=port, reload=reload)
 
     except Exception as e:
         logger.error(f"アプリケーションの起動でエラー: {e}", exc_info=True)
         sys.exit(1)
-
     finally:
         # 終了時のクリーンアップ
         cleanup_environment()
