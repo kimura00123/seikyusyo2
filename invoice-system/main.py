@@ -53,9 +53,10 @@ logging.getLogger().handlers.clear()
 
 
 class DetailListItem(QListWidgetItem):
-    def __init__(self, detail_data):
+    def __init__(self, detail_data, validation_results=None):
         super().__init__()
         self.detail_data = detail_data
+        self.validation_results = validation_results or {}
         self.update_display()
 
     def update_display(self):
@@ -66,8 +67,30 @@ class DetailListItem(QListWidgetItem):
         )
         self.setText(display_text)
 
+        # バリデーションエラーがある場合は赤色で表示
+        if not self.is_valid():
+            self.setForeground(QColor(255, 0, 0))
+            self.setToolTip(self.get_error_message())
+
         # ステータスに応じたアイコンを設定
-        self.setIcon(StatusIcon.create(self.detail_data["status"]))
+        status = "error" if not self.is_valid() else self.detail_data["status"]
+        self.setIcon(StatusIcon.create(status))
+
+    def is_valid(self):
+        """バリデーションエラーがないかチェック"""
+        return all(
+            item["is_valid"]
+            for item in self.validation_results.get(self.detail_data["no"], [])
+        )
+
+    def get_error_message(self):
+        """エラーメッセージを取得"""
+        errors = [
+            item["message"]
+            for item in self.validation_results.get(self.detail_data["no"], [])
+            if not item["is_valid"]
+        ]
+        return "\n".join(errors) if errors else ""
 
 
 class InvoiceStructuringSystem(QMainWindow):
