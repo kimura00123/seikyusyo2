@@ -113,24 +113,13 @@ async def upload_document(file: UploadFile = File(...)):
             processing_status[document_id]["progress"] = 70
             processing_status[document_id]["message"] = "バリデーション完了"
 
+            # バリデーション結果を記録（エラーがあっても処理は継続）
             if not validation_result.is_valid:
-                processing_status[document_id]["status"] = "validation_error"
+                processing_status[document_id]["status"] = "has_validation_errors"
                 processing_status[document_id]["errors"] = [
                     f"{e.field}: {e.message}" for e in validation_result.errors
                 ]
-                logger.warning(f"バリデーションエラー: {document_id}")
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "status": "error",
-                        "message": "バリデーションエラー",
-                        "document_id": document_id,
-                        "errors": [
-                            {"field": e.field, "message": e.message}
-                            for e in validation_result.errors
-                        ],
-                    },
-                )
+                logger.warning(f"バリデーションエラーを検出: {document_id}")
 
             # 明細画像の抽出
             image_processor = ImageProcessor()
@@ -163,8 +152,27 @@ async def upload_document(file: UploadFile = File(...)):
                         "pdf_filename": file.filename,
                         "excel_path": str(excel_path),
                         "image_count": len(image_paths),
-                        "warnings": [
-                            {"field": w.field, "message": w.message}
+                        "structured_data": structured_data.dict(),
+                    },
+                    "validation_results": {
+                        "is_valid": validation_result.is_valid,
+                        "items": [
+                            {
+                                "field": e.field,
+                                "value": e.value,
+                                "is_valid": False,
+                                "message": e.message,
+                            }
+                            for e in validation_result.errors
+                        ]
+                        + [
+                            {
+                                "field": w.field,
+                                "value": w.value,
+                                "is_valid": True,
+                                "message": w.message,
+                                "severity": "warning",
+                            }
                             for w in validation_result.warnings
                         ],
                     },
