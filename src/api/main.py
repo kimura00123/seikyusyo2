@@ -4,7 +4,6 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from src.utils.logger import get_logger
 from src.utils.config import settings
-from src.api.routers import document
 
 # ロガーの設定
 logger = get_logger(__name__)
@@ -25,13 +24,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ルーターの登録
-app.include_router(
-    document,
-    prefix="/document",
-    tags=["document"],
-)
-
 
 @app.on_event("startup")
 async def startup_event():
@@ -42,7 +34,7 @@ async def startup_event():
         logger.info("環境変数の検証が完了")
 
         # 一時ディレクトリの準備
-        temp_dir = settings.get_temp_dir()
+        temp_dir = settings.TEMP_DIR
         temp_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"一時ディレクトリを作成: {temp_dir}")
 
@@ -68,7 +60,7 @@ async def shutdown_event():
         from src.utils.temp_file_manager import TempFileManager
 
         # 一時ファイルのクリーンアップ
-        temp_manager = TempFileManager(str(settings.get_temp_dir()))
+        temp_manager = TempFileManager(str(settings.TEMP_DIR))
         deleted_count = temp_manager.cleanup_old_files(max_age_hours=24)
         logger.info(f"一時ファイルのクリーンアップが完了: {deleted_count}件")
 
@@ -94,6 +86,16 @@ async def global_exception_handler(request, exc):
 async def health_check():
     """ヘルスチェックエンドポイント"""
     return {"status": "healthy"}
+
+
+# ルーターの登録
+from src.api.routers import document_router
+
+app.include_router(
+    document_router,
+    prefix="/document",
+    tags=["document"],
+)
 
 
 if __name__ == "__main__":

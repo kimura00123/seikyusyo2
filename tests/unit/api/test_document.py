@@ -7,14 +7,14 @@ import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 from fastapi.testclient import TestClient
-from fastapi import UploadFile
+from fastapi import FastAPI, UploadFile
 
-from src.api.main import app
 from src.api.routers.document import (
     ValidationError,
     ValidationWarning,
     ValidationResponse,
     ProcessingStatus,
+    router,
 )
 from src.utils.config import settings
 from src.core.validation import Validator
@@ -66,7 +66,18 @@ class TestDocumentAPI:
     """ドキュメント処理APIのテスト"""
 
     @pytest.fixture
-    def client(self):
+    def app(self):
+        """テスト用のFastAPIアプリケーションを提供"""
+        app = FastAPI()
+        app.include_router(
+            router,
+            prefix="/document",
+            tags=["document"],
+        )
+        return app
+
+    @pytest.fixture
+    def client(self, app):
         """テストクライアントを提供"""
         return TestClient(app)
 
@@ -92,21 +103,32 @@ class TestDocumentAPI:
         """ドキュメントアップロードの成功テスト"""
         # モックの設定
         mocker.patch(
-            "src.utils.config.settings.get_temp_dir",
-            new_callable=PropertyMock,
-            return_value=mock_temp_dir,
+            "src.utils.config.settings.TEMP_DIR",
+            new=mock_temp_dir,
         )
         mocker.patch(
             "src.core.pdf_parser.PDFParser.extract_text_with_positions",
             return_value={1: []},
         )
+        # dict を返すように修正
+        structured_data_mock = {
+            "invoice_number": "TEST-001",
+            "date": "2025-02-15",
+            "amount": 1000,
+        }
         mocker.patch(
             "src.core.structuring.StructuringEngine.structure_invoice",
-            return_value=MagicMock(),
+            return_value=structured_data_mock,
         )
+        # ValidationResponse の代わりに MagicMock を使用
+        validation_mock = MagicMock()
+        validation_mock.is_valid = True
+        validation_mock.errors = []
+        validation_mock.warnings = []
+        validation_mock.normalized_data = structured_data_mock  # normalized_data を追加
         mocker.patch(
             "src.core.validation.Validator.validate",
-            return_value=MagicMock(is_valid=True, errors=[], warnings=[]),
+            return_value=validation_mock,
         )
         mocker.patch(
             "src.core.image_processor.ImageProcessor.extract_detail_regions",
@@ -143,11 +165,11 @@ class TestDocumentAPI:
         assert response.status_code == 400
         assert "PDFファイルのみ" in response.json()["detail"]
 
-    def test_get_processing_status(self, client, mocker):
+    def test_get_processing_status(self, client, app):
         """処理状態取得のテスト"""
         # 処理状態の設定
         document_id = "test_doc"
-        mock_status = {
+        app.state.processing_status = {
             document_id: {
                 "status": "processing",
                 "progress": 50,
@@ -155,7 +177,6 @@ class TestDocumentAPI:
                 "errors": [],
             }
         }
-        mocker.patch("src.api.routers.document.processing_status", mock_status)
 
         # リクエストの実行
         response = client.get(f"/document/status/{document_id}")
@@ -209,9 +230,8 @@ class TestDocumentAPI:
         (image_dir / "page2_detail1.jpg").touch()
 
         mocker.patch(
-            "src.utils.config.settings.get_temp_dir",
-            new_callable=PropertyMock,
-            return_value=mock_temp_dir,
+            "src.utils.config.settings.TEMP_DIR",
+            new=mock_temp_dir,
         )
 
         # リクエストの実行（全ページ）
@@ -237,9 +257,8 @@ class TestDocumentAPI:
         excel_path.touch()
 
         mocker.patch(
-            "src.utils.config.settings.get_temp_dir",
-            new_callable=PropertyMock,
-            return_value=mock_temp_dir,
+            "src.utils.config.settings.TEMP_DIR",
+            new=mock_temp_dir,
         )
 
         # リクエストの実行
@@ -258,9 +277,8 @@ class TestDocumentAPI:
         """一時ファイルのクリーンアップテスト"""
         # モックの設定
         mocker.patch(
-            "src.utils.config.settings.get_temp_dir",
-            new_callable=PropertyMock,
-            return_value=mock_temp_dir,
+            "src.utils.config.settings.TEMP_DIR",
+            new=mock_temp_dir,
         )
         mocker.patch(
             "src.utils.temp_file_manager.TempFileManager.cleanup_old_files",
@@ -268,7 +286,7 @@ class TestDocumentAPI:
         )
 
         # リクエストの実行
-        response = client.post("/document/cleanup?max_age=24")
+        response = client.post("/document/cleanup")
         assert response.status_code == 200
         assert response.json()["status"] == "success"
         assert "5件" in response.json()["message"]
