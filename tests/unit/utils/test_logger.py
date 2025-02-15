@@ -27,6 +27,14 @@ def temp_log_dir(tmp_path):
     return log_dir
 
 
+@pytest.fixture(autouse=True)
+def reset_logger():
+    """各テストの前にロガーをリセット"""
+    CustomLogger._instance = None
+    yield
+    CustomLogger._instance = None
+
+
 @pytest.fixture
 def mock_log_dir(temp_log_dir, monkeypatch):
     """ログディレクトリのパスをモック"""
@@ -37,8 +45,11 @@ def mock_log_dir(temp_log_dir, monkeypatch):
     return temp_log_dir
 
 
-def test_logger_initialization(mock_log_dir):
+def test_logger_initialization(mock_log_dir, monkeypatch):
     """ロガーの初期化テスト"""
+    # 環境変数をクリア
+    monkeypatch.delenv("LOG_LEVEL", raising=False)
+
     # ロガーの取得
     logger = get_logger("test_logger")
 
@@ -78,11 +89,13 @@ def test_log_levels(mock_log_dir, monkeypatch):
     """ログレベルのテスト"""
     # 環境変数でログレベルを設定
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    CustomLogger._instance = None  # ロガーをリセット
     logger = get_logger("test_levels")
     assert logger.level == logging.DEBUG
 
     # 無効なログレベル
     monkeypatch.setenv("LOG_LEVEL", "INVALID")
+    CustomLogger._instance = None  # ロガーをリセット
     logger = get_logger("test_invalid_level")
     assert logger.level == logging.INFO  # デフォルトに戻る
 
@@ -128,7 +141,8 @@ def test_singleton_behavior():
 
 def test_permission_error(mock_log_dir):
     """権限エラーのテスト"""
-    # ログディレクトリの権限を変更（読み取り専用）
+    # ログディレクトリを作成して権限を変更
+    mock_log_dir.mkdir(parents=True, exist_ok=True)
     mock_log_dir.chmod(0o444)
 
     # 権限エラーの発生を確認
@@ -149,6 +163,9 @@ def test_directory_creation_error(monkeypatch):
 
 def test_log_output(mock_log_dir):
     """ログ出力のテスト"""
+    # ログディレクトリを作成
+    mock_log_dir.mkdir(parents=True, exist_ok=True)
+
     logger = get_logger("test_output")
     log_file = mock_log_dir / "invoice_system.log"
     error_log = mock_log_dir / "error.log"
@@ -159,13 +176,20 @@ def test_log_output(mock_log_dir):
     logger.warning("警告メッセージ")
     logger.error("エラーメッセージ")
 
+    # ファイルが作成されるまで少し待つ
+    import time
+
+    time.sleep(0.1)
+
     # ログファイルの内容を検証
+    assert log_file.exists()
     log_content = log_file.read_text(encoding="utf-8-sig")
     assert "情報メッセージ" in log_content
     assert "警告メッセージ" in log_content
     assert "エラーメッセージ" in log_content
 
     # エラーログの内容を検証
+    assert error_log.exists()
     error_content = error_log.read_text(encoding="utf-8-sig")
     assert "エラーメッセージ" in error_content
     assert "情報メッセージ" not in error_content  # INFO レベルは含まれない

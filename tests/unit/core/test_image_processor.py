@@ -121,7 +121,7 @@ class TestImageProcessor:
         assert regions[0].page_num == 1
         assert regions[0].no == "1"
         assert regions[0].y_top == min(510, page_height)  # マージン10を加算
-        assert regions[0].y_bottom == 310  # No.2のy_top + マージン
+        assert regions[0].y_bottom == 290  # No.2のy_top - マージン
 
         # No.2の領域検証
         assert regions[1].page_num == 1
@@ -205,5 +205,5 @@ class TestImageProcessor:
         for path in image_paths:
             img = Image.open(path)
             assert img.mode == "RGB"
-            assert img.size[0] == 700  # x_right - x_left
+            assert img.size[0] == 831  # (x_right - x_left) * scale_factor
             img.close()

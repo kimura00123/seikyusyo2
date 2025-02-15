@@ -5,7 +5,7 @@
 import os
 import pytest
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 from fastapi.testclient import TestClient
 from fastapi import UploadFile
 
@@ -16,6 +16,8 @@ from src.api.routers.document import (
     ValidationResponse,
     ProcessingStatus,
 )
+from src.utils.config import settings
+from src.core.validation import Validator
 
 
 def test_validation_error_model():
@@ -90,7 +92,8 @@ class TestDocumentAPI:
         """ドキュメントアップロードの成功テスト"""
         # モックの設定
         mocker.patch(
-            "src.api.routers.document.Config.get_temp_dir",
+            "src.utils.config.settings.get_temp_dir",
+            new_callable=PropertyMock,
             return_value=mock_temp_dir,
         )
         mocker.patch(
@@ -175,7 +178,7 @@ class TestDocumentAPI:
             "warnings": [],
         }
         mocker.patch(
-            "src.api.routers.document.Validator.get_validation_result",
+            "src.core.validation.Validator.get_validation_result",
             return_value=mock_result,
         )
 
@@ -188,7 +191,7 @@ class TestDocumentAPI:
 
         # 存在しないバリデーション結果
         mocker.patch(
-            "src.api.routers.document.Validator.get_validation_result",
+            "src.core.validation.Validator.get_validation_result",
             return_value=None,
         )
         response = client.get(f"/document/validation/{document_id}")
@@ -205,7 +208,8 @@ class TestDocumentAPI:
         (image_dir / "page2_detail1.jpg").touch()
 
         mocker.patch(
-            "src.api.routers.document.Config.get_temp_dir",
+            "src.utils.config.settings.get_temp_dir",
+            new_callable=PropertyMock,
             return_value=mock_temp_dir,
         )
 
@@ -232,7 +236,8 @@ class TestDocumentAPI:
         excel_path.touch()
 
         mocker.patch(
-            "src.api.routers.document.Config.get_temp_dir",
+            "src.utils.config.settings.get_temp_dir",
+            new_callable=PropertyMock,
             return_value=mock_temp_dir,
         )
 
@@ -252,7 +257,8 @@ class TestDocumentAPI:
         """一時ファイルのクリーンアップテスト"""
         # モックの設定
         mocker.patch(
-            "src.api.routers.document.Config.get_temp_dir",
+            "src.utils.config.settings.get_temp_dir",
+            new_callable=PropertyMock,
             return_value=mock_temp_dir,
         )
         mocker.patch(

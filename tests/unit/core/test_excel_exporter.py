@@ -77,8 +77,8 @@ class TestExcelExporter:
     def test_style_initialization(self, exporter):
         """スタイル設定の初期化テスト"""
         # ヘッダーの背景色
-        assert exporter.header_fill.start_color.rgb == "1976D2"
-        assert exporter.header_fill.end_color.rgb == "1976D2"
+        assert exporter.header_fill.start_color.rgb in ["1976D2", "001976D2"]
+        assert exporter.header_fill.end_color.rgb in ["1976D2", "001976D2"]
         assert exporter.header_fill.fill_type == "solid"
 
         # フォント
@@ -146,7 +146,7 @@ class TestExcelExporter:
         # スタイルの検証
         # ヘッダー行
         for cell in ws[1]:
-            assert cell.fill.start_color.rgb == "1976D2"
+            assert cell.fill.start_color.rgb in ["1976D2", "001976D2"]
             assert cell.font.color.rgb == "FFFFFF"
             assert cell.border.left.style == "thin"
             assert cell.alignment.horizontal == "center"
@@ -184,8 +184,9 @@ class TestExcelExporter:
 
     def test_export_to_excel_with_invalid_path(self, exporter, sample_data):
         """無効なパスでのエクセル出力テスト"""
-        with pytest.raises(Exception):
-            exporter.export_to_excel(sample_data, "/invalid/path")
+        with pytest.raises(OSError):
+            # Windowsで無効なパス文字を含むパスを指定
+            exporter.export_to_excel(sample_data, "invalid/path/*:<>")
 
     def test_export_to_excel_with_empty_data(self, exporter, tmp_path):
         """空のデータでのエクセル出力テスト"""

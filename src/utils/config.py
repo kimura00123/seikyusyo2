@@ -61,12 +61,13 @@ class Settings(BaseModel):
         """本番環境かどうかを判定する"""
         return self.ENV == Environment.PRODUCTION
 
+    @property
     def get_temp_dir(self) -> Path:
         """一時ディレクトリのパスを取得する"""
         temp_dir = self.TEMP_DIR
         if os.getenv("TEMP_DIR"):
             # 環境変数から取得した場合、パスの区切り文字を正規化
-            temp_dir = Path(os.getenv("TEMP_DIR").replace("/", os.path.sep))
+            temp_dir = Path(os.getenv("TEMP_DIR"))
         if not temp_dir.exists():
             temp_dir.mkdir(parents=True, exist_ok=True)
         return temp_dir
