@@ -112,7 +112,7 @@ def test_file_handler_rotation(mock_log_dir):
     assert (
         file_handler.when.lower() == "midnight"
     )  # 日次ローテーション（大文字小文字を区別しない）
-    assert file_handler.interval == 1  # 1日ごと
+    assert file_handler.interval == 86400  # 1日 = 86400秒
     assert file_handler.backupCount == BACKUP_COUNT  # バックアップ数
     assert file_handler.encoding == "utf-8-sig"  # Windows対応のエンコーディング
 
