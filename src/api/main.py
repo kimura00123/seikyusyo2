@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from utils.logger import get_logger
-from utils.config import Config
+from utils.config import settings
 from .routers import document
 
 # ロガーの設定
@@ -38,21 +38,21 @@ async def startup_event():
     """アプリケーション起動時の処理"""
     try:
         # 環境変数の検証
-        Config.validate()
+        settings.validate_production()
         logger.info("環境変数の検証が完了")
 
         # 一時ディレクトリの準備
-        temp_dir = Config.get_temp_dir()
+        temp_dir = settings.get_temp_dir()
         temp_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"一時ディレクトリを作成: {temp_dir}")
 
         # ログレベルの設定
-        log_level = getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO)
+        log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
         logging.getLogger().setLevel(log_level)
-        logger.info(f"ログレベルを設定: {Config.LOG_LEVEL}")
+        logger.info(f"ログレベルを設定: {settings.LOG_LEVEL}")
 
         # 開発環境の場合は追加の設定
-        if Config.is_development():
+        if settings.is_development():
             logger.info("開発環境で実行中")
             # 開発用の設定をここに追加
 
@@ -68,7 +68,7 @@ async def shutdown_event():
         from utils.temp_file_manager import TempFileManager
 
         # 一時ファイルのクリーンアップ
-        temp_manager = TempFileManager(str(Config.get_temp_dir()))
+        temp_manager = TempFileManager(str(settings.get_temp_dir()))
         deleted_count = temp_manager.cleanup_old_files(max_age_hours=24)
         logger.info(f"一時ファイルのクリーンアップが完了: {deleted_count}件")
 
@@ -85,7 +85,7 @@ async def global_exception_handler(request, exc):
         content={
             "status": "error",
             "message": "内部サーバーエラー",
-            "detail": str(exc) if Config.is_development() else None,
+            "detail": str(exc) if settings.is_development() else None,
         },
     )
 
@@ -100,8 +100,8 @@ if __name__ == "__main__":
     import uvicorn
 
     host = "0.0.0.0"
-    port = int(Config.get("PORT", "8000"))
-    reload = Config.is_development()
+    port = settings.PORT
+    reload = settings.is_development()
 
     logger.info(f"APIサーバーを起動: {host}:{port}")
     uvicorn.run(app, host=host, port=port, reload=reload)
