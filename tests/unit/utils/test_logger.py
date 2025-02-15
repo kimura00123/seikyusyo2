@@ -109,7 +109,9 @@ def test_file_handler_rotation(mock_log_dir):
     )
 
     # ローテーション設定の検証
-    assert file_handler.when == "midnight"  # 日次ローテーション
+    assert (
+        file_handler.when.lower() == "midnight"
+    )  # 日次ローテーション（大文字小文字を区別しない）
     assert file_handler.interval == 1  # 1日ごと
     assert file_handler.backupCount == BACKUP_COUNT  # バックアップ数
     assert file_handler.encoding == "utf-8-sig"  # Windows対応のエンコーディング
@@ -142,16 +144,26 @@ def test_singleton_behavior():
 
 def test_permission_error(mock_log_dir):
     """権限エラーのテスト"""
-    # ログディレクトリを作成して権限を変更
-    mock_log_dir.parent.mkdir(parents=True, exist_ok=True)
-    mock_log_dir.parent.chmod(0o444)  # 親ディレクトリを読み取り専用に設定
+    # ログディレクトリを作成
+    mock_log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = mock_log_dir / "invoice_system.log"
+
+    # ログファイルを作成して読み取り専用に設定
+    log_file.touch()
+    if os.name == "nt":
+        import stat
+
+        log_file.chmod(stat.S_IREAD)  # Windowsの場合
+    else:
+        log_file.chmod(0o444)  # UNIXの場合
 
     # ロガーをリセット
     CustomLogger._instance = None
 
-    # ログディレクトリの作成時に権限エラー
+    # ログファイルへの書き込みで権限エラー
     with pytest.raises(PermissionError):
-        get_logger("test_permission")
+        logger = get_logger("test_permission")
+        logger.info("このメッセージは書き込めないはず")
 
 
 def test_directory_creation_error(monkeypatch):
