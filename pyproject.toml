@@ -48,10 +48,11 @@ dev-dependencies = [
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/takatuski"]
+packages = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "--cov=src --cov-report=html --cov-report=term-missing"
 asyncio_mode = "auto"
+pythonpath = ["src"]
