@@ -2,7 +2,7 @@ import os
 from enum import Enum
 from pathlib import Path
 from typing import Optional
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from dotenv import load_dotenv
 
 # .envファイルの読み込み
@@ -20,9 +20,11 @@ class Settings(BaseModel):
     """環境設定クラス"""
 
     # 基本設定
-    ENV: Environment = Field(default=Environment.DEVELOPMENT)
-    LOG_LEVEL: str = Field(default="INFO")
-    PORT: int = Field(default=8000)
+    ENV: Environment = Field(
+        default_factory=lambda: Environment(os.getenv("ENV", "development"))
+    )
+    LOG_LEVEL: str = Field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
+    PORT: int = Field(default_factory=lambda: int(os.getenv("PORT", "8000")))
 
     # Azure OpenAI API設定
     AZURE_OPENAI_API_KEY: Optional[str] = None
@@ -36,14 +38,16 @@ class Settings(BaseModel):
     COSMOS_DB_CONTAINER_NAME: Optional[str] = None
 
     # 画像処理設定
-    IMAGE_DPI: int = Field(default=200)
-    IMAGE_QUALITY: int = Field(default=95)
+    IMAGE_DPI: int = Field(default_factory=lambda: int(os.getenv("IMAGE_DPI", "200")))
+    IMAGE_QUALITY: int = Field(
+        default_factory=lambda: int(os.getenv("IMAGE_QUALITY", "95"))
+    )
 
     # ディレクトリ設定
     BASE_DIR: Path = Field(default=Path(__file__).parent.parent.parent)
     TEMP_DIR: Path = None
 
-    @validator("TEMP_DIR", pre=True, always=True)
+    @field_validator("TEMP_DIR", mode="before")
     def set_temp_dir(cls, v, values):
         """一時ディレクトリのパスを設定"""
         if v is None:
