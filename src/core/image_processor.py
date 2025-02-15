@@ -14,7 +14,7 @@ from pdfminer.layout import (
     LTTextBoxHorizontal,
 )
 from utils.logger import get_logger
-from utils.config import Config
+from utils.config import settings
 
 logger = get_logger(__name__)
 
@@ -37,8 +37,8 @@ class ImageProcessor:
 
     def __init__(self):
         # 画像設定
-        self.dpi = Config.IMAGE_DPI
-        self.quality = Config.IMAGE_QUALITY
+        self.dpi = settings.IMAGE_DPI
+        self.quality = settings.IMAGE_QUALITY
         self.pdf_height = 842  # A4サイズの高さ（ポイント単位）
 
     def extract_detail_regions(self, pdf_path: str) -> List[DetailRegion]:
