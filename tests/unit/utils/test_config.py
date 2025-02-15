@@ -33,7 +33,7 @@ def test_default_values(mock_env):
     assert settings.PORT == 8000
     assert settings.IMAGE_DPI == 200
     assert settings.IMAGE_QUALITY == 95
-    assert isinstance(settings.get_temp_dir(), Path)
+    assert isinstance(settings.get_temp_dir, Path)
 
 
 def test_environment_variables(mock_env):
@@ -53,7 +53,10 @@ def test_environment_variables(mock_env):
     assert settings.PORT == 9000
     assert settings.IMAGE_DPI == 300
     assert settings.IMAGE_QUALITY == 90
-    assert str(settings.get_temp_dir()) == "/custom/temp"
+    temp_dir = settings.get_temp_dir
+    assert isinstance(temp_dir, Path)
+    assert temp_dir.name == "temp"
+    assert temp_dir.parent.name == "custom"
 
 
 def test_environment_detection(mock_env):
@@ -75,14 +78,17 @@ def test_get_temp_dir(mock_env):
     """一時ディレクトリ取得のテスト"""
     # デフォルトの一時ディレクトリ
     settings = Settings()
-    temp_dir = settings.get_temp_dir()
+    temp_dir = settings.get_temp_dir
     assert isinstance(temp_dir, Path)
-    assert str(temp_dir).endswith("temp")
+    assert temp_dir.name == "temp"
 
     # カスタムの一時ディレクトリ
     mock_env.setenv("TEMP_DIR", "/custom/temp")
     settings = Settings()
-    assert str(settings.get_temp_dir()) == "/custom/temp"
+    temp_dir = settings.get_temp_dir
+    assert isinstance(temp_dir, Path)
+    assert temp_dir.name == "temp"
+    assert temp_dir.parent.name == "custom"
 
 
 def test_validation_development(mock_env):
@@ -95,24 +101,30 @@ def test_validation_development(mock_env):
 
 def test_validation_production(mock_env):
     """本番環境でのバリデーションテスト"""
+    # 必須項目が不足している場合
     mock_env.setenv("ENV", "production")
     settings = Settings()
-
-    # 必須項目が不足している場合
     with pytest.raises(ValueError) as exc_info:
         settings.validate_production()
     assert "必須の環境変数が設定されていません" in str(exc_info.value)
     assert "AZURE_OPENAI_API_KEY" in str(exc_info.value)
 
     # 必須項目がすべて設定されている場合
-    mock_env.setenv("AZURE_OPENAI_API_KEY", "test-key")
-    mock_env.setenv("AZURE_OPENAI_ENDPOINT", "test-endpoint")
-    mock_env.setenv("AZURE_OPENAI_DEPLOYMENT_NAME", "test-deployment")
-    mock_env.setenv("COSMOS_DB_CONNECTION_STRING", "test-connection")
-    mock_env.setenv("COSMOS_DB_DATABASE_NAME", "test-db")
-    mock_env.setenv("COSMOS_DB_CONTAINER_NAME", "test-container")
-    settings = Settings()
-    assert settings.validate_production() is True
+    env_vars = {
+        "ENV": "production",
+        "AZURE_OPENAI_API_KEY": "test-key",
+        "AZURE_OPENAI_ENDPOINT": "test-endpoint",
+        "AZURE_OPENAI_DEPLOYMENT_NAME": "test-deployment",
+        "COSMOS_DB_CONNECTION_STRING": "test-connection",
+        "COSMOS_DB_DATABASE_NAME": "test-db",
+        "COSMOS_DB_CONTAINER_NAME": "test-container",
+    }
+    for key, value in env_vars.items():
+        mock_env.setenv(key, value)
+
+    settings = Settings()  # 環境変数を設定した後にインスタンス化
+    result = settings.validate_production()
+    assert result is True
 
 
 def test_base_dir():
