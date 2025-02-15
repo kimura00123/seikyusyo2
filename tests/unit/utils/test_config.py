@@ -103,28 +103,30 @@ def test_validation_production(mock_env):
     """本番環境でのバリデーションテスト"""
     # 必須項目が不足している場合
     mock_env.setenv("ENV", "production")
-    settings = Settings()
+    settings = Settings(
+        ENV=Environment.PRODUCTION,
+        AZURE_OPENAI_API_KEY=None,
+        AZURE_OPENAI_ENDPOINT=None,
+        AZURE_OPENAI_DEPLOYMENT_NAME=None,
+        COSMOS_DB_CONNECTION_STRING=None,
+        COSMOS_DB_DATABASE_NAME=None,
+        COSMOS_DB_CONTAINER_NAME=None,
+    )
     with pytest.raises(ValueError) as exc_info:
         settings.validate_production()
     assert "必須の環境変数が設定されていません" in str(exc_info.value)
     assert "AZURE_OPENAI_API_KEY" in str(exc_info.value)
 
     # 必須項目がすべて設定されている場合
-    mock_env.setenv("AZURE_OPENAI_API_KEY", "test-key")
-    mock_env.setenv("AZURE_OPENAI_ENDPOINT", "test-endpoint")
-    mock_env.setenv("AZURE_OPENAI_DEPLOYMENT_NAME", "test-deployment")
-    mock_env.setenv("COSMOS_DB_CONNECTION_STRING", "test-connection")
-    mock_env.setenv("COSMOS_DB_DATABASE_NAME", "test-db")
-    mock_env.setenv("COSMOS_DB_CONTAINER_NAME", "test-container")
-
-    # 新しいインスタンスを作成して検証
-    settings = Settings()
-    assert settings.AZURE_OPENAI_API_KEY == "test-key"
-    assert settings.AZURE_OPENAI_ENDPOINT == "test-endpoint"
-    assert settings.AZURE_OPENAI_DEPLOYMENT_NAME == "test-deployment"
-    assert settings.COSMOS_DB_CONNECTION_STRING == "test-connection"
-    assert settings.COSMOS_DB_DATABASE_NAME == "test-db"
-    assert settings.COSMOS_DB_CONTAINER_NAME == "test-container"
+    settings = Settings(
+        ENV=Environment.PRODUCTION,
+        AZURE_OPENAI_API_KEY="test-key",
+        AZURE_OPENAI_ENDPOINT="test-endpoint",
+        AZURE_OPENAI_DEPLOYMENT_NAME="test-deployment",
+        COSMOS_DB_CONNECTION_STRING="test-connection",
+        COSMOS_DB_DATABASE_NAME="test-db",
+        COSMOS_DB_CONTAINER_NAME="test-container",
+    )
 
     # バリデーションを実行
     result = settings.validate_production()

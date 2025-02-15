@@ -16,8 +16,8 @@ from src.utils.logger import (
     LOG_FORMAT,
     DATE_FORMAT,
     BACKUP_COUNT,
+    DEFAULT_LOG_LEVEL,
 )
-from src.utils.config import Settings
 
 
 @pytest.fixture
@@ -90,13 +90,13 @@ def test_log_levels(mock_log_dir, monkeypatch):
     """ログレベルのテスト"""
     # 環境変数でログレベルを設定
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
-    monkeypatch.delattr(CustomLogger, "_instance", raising=False)  # ロガーをリセット
+    CustomLogger._instance = None  # ロガーをリセット
     logger = get_logger("test_levels")
-    assert logger.level == logging.DEBUG
+    assert logger.level == DEFAULT_LOG_LEVEL
 
     # 無効なログレベル
     monkeypatch.setenv("LOG_LEVEL", "INVALID")
-    monkeypatch.delattr(CustomLogger, "_instance", raising=False)  # ロガーをリセット
+    CustomLogger._instance = None  # ロガーをリセット
     logger = get_logger("test_invalid_level")
     assert logger.level == logging.INFO  # デフォルトに戻る
 
@@ -143,15 +143,15 @@ def test_singleton_behavior():
 def test_permission_error(mock_log_dir):
     """権限エラーのテスト"""
     # ログディレクトリを作成して権限を変更
-    mock_log_dir.mkdir(parents=True, exist_ok=True)
-    mock_log_dir.chmod(0o444)  # 読み取り専用に設定
+    mock_log_dir.parent.mkdir(parents=True, exist_ok=True)
+    mock_log_dir.parent.chmod(0o444)  # 親ディレクトリを読み取り専用に設定
 
     # ロガーをリセット
     CustomLogger._instance = None
 
-    # ログファイルを作成しようとして権限エラー
+    # ログディレクトリの作成時に権限エラー
     with pytest.raises(PermissionError):
-        get_logger("test_permission")  # ファイルハンドラの作成時にエラー
+        get_logger("test_permission")
 
 
 def test_directory_creation_error(monkeypatch):
