@@ -3,14 +3,14 @@ from typing import List, Optional
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Path
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
-from core.pdf_parser import PDFParser
-from core.structuring import StructuringEngine
-from core.validation import Validator
-from core.image_processor import ImageProcessor
-from core.excel_exporter import ExcelExporter
-from utils.logger import get_logger
-from utils.config import settings
-from utils.temp_file_manager import TempFileManager
+from src.core.pdf_parser import PDFParser
+from src.core.structuring import StructuringEngine
+from src.core.validation import Validator
+from src.core.image_processor import ImageProcessor
+from src.core.excel_exporter import ExcelExporter
+from src.utils.logger import get_logger
+from src.utils.config import settings
+from src.utils.temp_file_manager import TempFileManager
 
 
 # レスポンスモデルの定義

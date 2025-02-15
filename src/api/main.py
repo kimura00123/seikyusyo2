@@ -2,9 +2,9 @@ import logging
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from utils.logger import get_logger
-from utils.config import settings
-from .routers import document
+from src.utils.logger import get_logger
+from src.utils.config import settings
+from src.api.routers import document
 
 # ロガーの設定
 logger = get_logger(__name__)
@@ -27,9 +27,9 @@ app.add_middleware(
 
 # ルーターの登録
 app.include_router(
-    document,
-    prefix="/api/documents",
-    tags=["documents"],
+    document.router,
+    prefix="/document",
+    tags=["document"],
 )
 
 
@@ -65,7 +65,7 @@ async def startup_event():
 async def shutdown_event():
     """アプリケーション終了時の処理"""
     try:
-        from utils.temp_file_manager import TempFileManager
+        from src.utils.temp_file_manager import TempFileManager
 
         # 一時ファイルのクリーンアップ
         temp_manager = TempFileManager(str(settings.get_temp_dir()))
