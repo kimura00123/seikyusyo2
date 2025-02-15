@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs
+logs/
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Qt Creator
+*.pro.user
+*.pro.user.*
+*.qmlproject.user
+*.qmlproject.user.*
+
+# Qt Quick
+*.qmlc
+*.jsc
+
+# Qt Build
+build/
+debug/
+release/
+*.o
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# Old files
+old/

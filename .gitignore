@@ -23,6 +23,7 @@ wheels/
 # Virtual Environment
 .env
 .venv
+env/
 venv/
 ENV/
 
@@ -36,33 +37,23 @@ ENV/
 # Logs
 logs/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
-# Runtime data
+# Temporary files
 temp/
-*.pid
-*.seed
-*.pid.lock
-
-# Testing
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
-.pytest_cache/
-
-# Build
-*.mo
-*.pot
-
-# Azure
-.azure/
+tmp/
+*.tmp
 
 # Project specific
-invoice-system/logs/
-invoice-system/temp/
+sample*.pdf
+sample*.csv
+明細行の画像データ抽出.py
+請求書(書類・磁気)からの構造化データ共通テキスト抽出（LLMベース）.py
+JSON-to-csv（LLMベース）.py
+書類_【DSS】請求明細書作成_請求書.pdf
+磁気_【請求書】寺田倉庫11月分（磁気）.pdf
+高槻システム要件定義.txt
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
