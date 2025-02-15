@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
 from utils.logger import get_logger
-from utils.config import Config
+from utils.config import settings
 from core.pdf_parser import TextElement
 
 logger = get_logger(__name__)
@@ -67,10 +67,10 @@ class StructuringEngine:
 
     def __init__(self):
         # Azure OpenAI APIの設定
-        self.api_key = Config.AZURE_OPENAI_API_KEY
-        self.endpoint = Config.AZURE_OPENAI_ENDPOINT
-        self.api_version = Config.AZURE_OPENAI_API_VERSION
-        self.deployment_name = Config.AZURE_OPENAI_DEPLOYMENT_NAME
+        self.api_key = settings.AZURE_OPENAI_API_KEY
+        self.endpoint = settings.AZURE_OPENAI_ENDPOINT
+        self.api_version = settings.AZURE_OPENAI_API_VERSION
+        self.deployment_name = settings.AZURE_OPENAI_DEPLOYMENT_NAME
 
     async def structure_invoice(
         self, text_elements: Dict[int, List[TextElement]]
