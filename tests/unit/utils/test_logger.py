@@ -17,6 +17,7 @@ from src.utils.logger import (
     DATE_FORMAT,
     BACKUP_COUNT,
 )
+from src.utils.config import Settings
 
 
 @pytest.fixture
@@ -89,13 +90,13 @@ def test_log_levels(mock_log_dir, monkeypatch):
     """ログレベルのテスト"""
     # 環境変数でログレベルを設定
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
-    CustomLogger._instance = None  # ロガーをリセット
+    monkeypatch.delattr(CustomLogger, "_instance", raising=False)  # ロガーをリセット
     logger = get_logger("test_levels")
     assert logger.level == logging.DEBUG
 
     # 無効なログレベル
     monkeypatch.setenv("LOG_LEVEL", "INVALID")
-    CustomLogger._instance = None  # ロガーをリセット
+    monkeypatch.delattr(CustomLogger, "_instance", raising=False)  # ロガーをリセット
     logger = get_logger("test_invalid_level")
     assert logger.level == logging.INFO  # デフォルトに戻る
 
@@ -143,22 +144,29 @@ def test_permission_error(mock_log_dir):
     """権限エラーのテスト"""
     # ログディレクトリを作成して権限を変更
     mock_log_dir.mkdir(parents=True, exist_ok=True)
-    mock_log_dir.chmod(0o444)
+    mock_log_dir.chmod(0o444)  # 読み取り専用に設定
 
-    # 権限エラーの発生を確認
+    # ロガーをリセット
+    CustomLogger._instance = None
+
+    # ログファイルを作成しようとして権限エラー
     with pytest.raises(PermissionError):
-        get_logger("test_permission")
+        get_logger("test_permission")  # ファイルハンドラの作成時にエラー
 
 
 def test_directory_creation_error(monkeypatch):
     """ディレクトリ作成エラーのテスト"""
-    # 無効なパスを設定
-    invalid_dir = Path("/invalid/path/logs")
+    # 無効なパスを設定（Windowsで無効な文字を含むパス）
+    invalid_dir = Path("invalid/path/*:<>/logs")
     monkeypatch.setattr("src.utils.logger.LOG_DIR", invalid_dir)
+
+    # ロガーをリセット
+    CustomLogger._instance = None
 
     # OSErrorの発生を確認
     with pytest.raises(OSError):
-        get_logger("test_dir_error")
+        logger = get_logger("test_dir_error")
+        logger.info("このメッセージは書き込めないはず")
 
 
 def test_log_output(mock_log_dir):
