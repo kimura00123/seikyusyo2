@@ -93,31 +93,30 @@ class TestDocumentAPI:
         # モックの設定
         mocker.patch(
             "src.utils.config.settings.get_temp_dir",
-            new_callable=PropertyMock,
             return_value=mock_temp_dir,
         )
         mocker.patch(
-            "src.api.routers.document.PDFParser.extract_text_with_positions",
+            "src.core.pdf_parser.PDFParser.extract_text_with_positions",
             return_value={1: []},
         )
         mocker.patch(
-            "src.api.routers.document.StructuringEngine.structure_invoice",
+            "src.core.structuring.StructuringEngine.structure_invoice",
             return_value=MagicMock(),
         )
         mocker.patch(
-            "src.api.routers.document.Validator.validate",
+            "src.core.validation.Validator.validate",
             return_value=MagicMock(is_valid=True, errors=[], warnings=[]),
         )
         mocker.patch(
-            "src.api.routers.document.ImageProcessor.extract_detail_regions",
+            "src.core.image_processor.ImageProcessor.extract_detail_regions",
             return_value=[],
         )
         mocker.patch(
-            "src.api.routers.document.ImageProcessor.extract_detail_images",
+            "src.core.image_processor.ImageProcessor.extract_detail_images",
             return_value=[],
         )
         mocker.patch(
-            "src.api.routers.document.ExcelExporter.export_to_excel",
+            "src.core.excel_exporter.ExcelExporter.export_to_excel",
             return_value=str(mock_temp_dir / "processed" / "test.xlsx"),
         )
 
@@ -209,7 +208,6 @@ class TestDocumentAPI:
 
         mocker.patch(
             "src.utils.config.settings.get_temp_dir",
-            new_callable=PropertyMock,
             return_value=mock_temp_dir,
         )
 
@@ -237,7 +235,6 @@ class TestDocumentAPI:
 
         mocker.patch(
             "src.utils.config.settings.get_temp_dir",
-            new_callable=PropertyMock,
             return_value=mock_temp_dir,
         )
 
@@ -258,11 +255,10 @@ class TestDocumentAPI:
         # モックの設定
         mocker.patch(
             "src.utils.config.settings.get_temp_dir",
-            new_callable=PropertyMock,
             return_value=mock_temp_dir,
         )
         mocker.patch(
-            "src.api.routers.document.TempFileManager.cleanup_old_files",
+            "src.utils.temp_file_manager.TempFileManager.cleanup_old_files",
             return_value=5,
         )
 

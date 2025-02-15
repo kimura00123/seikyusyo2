@@ -82,7 +82,7 @@ class TestExcelExporter:
         assert exporter.header_fill.fill_type == "solid"
 
         # フォント
-        assert exporter.header_font.color.rgb == "FFFFFF"
+        assert exporter.header_font.color.rgb in ["FFFFFF", "00FFFFFF"]
         assert exporter.header_font.bold is True
 
         # 罫線
@@ -147,7 +147,7 @@ class TestExcelExporter:
         # ヘッダー行
         for cell in ws[1]:
             assert cell.fill.start_color.rgb in ["1976D2", "001976D2"]
-            assert cell.font.color.rgb == "FFFFFF"
+            assert cell.font.color.rgb in ["FFFFFF", "00FFFFFF"]
             assert cell.border.left.style == "thin"
             assert cell.alignment.horizontal == "center"
 

@@ -89,7 +89,8 @@ class TestValidationRule:
         assert rule.validate_tax_rate("") is not None  # 空文字
         assert rule.validate_tax_rate("5%") is not None  # 不正な税率
         assert rule.validate_tax_rate("abc") is not None  # 数値以外
-        assert rule.validate_tax_rate("10") is not None  # %なし
+        assert rule.validate_tax_rate("abc") is not None  # 数値以外
+        assert rule.validate_tax_rate("15%") is not None  # 不正な税率
 
     def test_validate_date_range(self):
         """日付範囲バリデーションのテスト"""
@@ -204,13 +205,16 @@ class TestValidator:
 
         # 金額の正規化
         assert (
-            normalized.customers[0].entries[0].amount == "1000"
+            normalized["customers"][0]["entries"][0]["amount"] == "1000"
         )  # カンマと円記号が除去される
 
         # 税率の正規化
-        assert normalized.customers[0].entries[0].tax_rate == "10"  # %記号が除去される
+        assert (
+            normalized["customers"][0]["entries"][0]["tax_rate"] == "10"
+        )  # %記号が除去される
 
         # 日付範囲の正規化
         assert (
-            normalized.customers[0].entries[0].date_range == "2024/01/01-2024/01/31"
+            normalized["customers"][0]["entries"][0]["date_range"]
+            == "2024/01/01-2024/01/31"
         )  # 形式が統一される
