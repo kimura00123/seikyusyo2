@@ -9,7 +9,7 @@ from core.validation import Validator
 from core.image_processor import ImageProcessor
 from core.excel_exporter import ExcelExporter
 from utils.logger import get_logger
-from utils.config import Config
+from utils.config import settings
 from utils.temp_file_manager import TempFileManager
 
 
@@ -57,7 +57,7 @@ async def upload_document(file: UploadFile = File(...)):
     """
     try:
         # 一時ディレクトリの準備
-        temp_dir = Config.get_temp_dir()
+        temp_dir = settings.get_temp_dir()
         upload_dir = temp_dir / "uploads"
         image_dir = temp_dir / "images"
         processed_dir = temp_dir / "processed"
@@ -249,7 +249,7 @@ async def get_detail_images(
 ) -> List[str]:
     """明細画像のパスリストを取得する"""
     try:
-        image_dir = Config.get_temp_dir() / "images" / document_id
+        image_dir = settings.get_temp_dir() / "images" / document_id
         if not image_dir.exists():
             raise HTTPException(status_code=404, detail="画像が見つかりません")
 
@@ -282,7 +282,7 @@ async def download_file(document_id: str = Path(..., description="ドキュメ�
     """
     try:
         # 処理済みファイルの取得
-        processed_dir = Config.get_temp_dir() / "processed"
+        processed_dir = settings.get_temp_dir() / "processed"
         file_path = processed_dir / f"{document_id}.xlsx"
 
         if not file_path.exists():
@@ -320,7 +320,7 @@ async def cleanup_temp_files(
     """
     try:
         # 一時ファイルのクリーンアップ
-        temp_manager = TempFileManager(str(Config.get_temp_dir()))
+        temp_manager = TempFileManager(str(settings.get_temp_dir()))
         deleted_count = temp_manager.cleanup_old_files(max_age_hours=max_age)
         logger.info(f"一時ファイルのクリーンアップ完了: {deleted_count}件")
 
