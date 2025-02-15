@@ -1,90 +1,82 @@
 import os
+from enum import Enum
 from pathlib import Path
 from typing import Optional
+from pydantic import BaseModel, Field, validator
 from dotenv import load_dotenv
 
 # .envファイルの読み込み
 load_dotenv()
 
 
-class Config:
+class Environment(str, Enum):
+    """環境の種類"""
+
+    DEVELOPMENT = "development"
+    PRODUCTION = "production"
+
+
+class Settings(BaseModel):
     """環境設定クラス"""
 
     # 基本設定
-    ENV = os.getenv("ENV", "development")
-    LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-    PORT = int(os.getenv("PORT", "8000"))
+    ENV: Environment = Field(default=Environment.DEVELOPMENT)
+    LOG_LEVEL: str = Field(default="INFO")
+    PORT: int = Field(default=8000)
 
     # Azure OpenAI API設定
-    AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-    AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
-    AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2023-05-15")
-    AZURE_OPENAI_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+    AZURE_OPENAI_API_KEY: Optional[str] = None
+    AZURE_OPENAI_ENDPOINT: Optional[str] = None
+    AZURE_OPENAI_API_VERSION: str = Field(default="2023-05-15")
+    AZURE_OPENAI_DEPLOYMENT_NAME: Optional[str] = None
+
+    # CosmosDB設定
+    COSMOS_DB_CONNECTION_STRING: Optional[str] = None
+    COSMOS_DB_DATABASE_NAME: Optional[str] = None
+    COSMOS_DB_CONTAINER_NAME: Optional[str] = None
 
     # 画像処理設定
-    IMAGE_DPI = int(os.getenv("IMAGE_DPI", "200"))
-    IMAGE_QUALITY = int(os.getenv("IMAGE_QUALITY", "95"))
+    IMAGE_DPI: int = Field(default=200)
+    IMAGE_QUALITY: int = Field(default=95)
 
     # ディレクトリ設定
-    BASE_DIR = Path(__file__).parent.parent.parent
-    TEMP_DIR = os.getenv("TEMP_DIR", str(BASE_DIR / "temp"))
+    BASE_DIR: Path = Field(default=Path(__file__).parent.parent.parent)
+    TEMP_DIR: Path = None
 
-    @classmethod
-    def is_development(cls) -> bool:
+    @validator("TEMP_DIR", pre=True, always=True)
+    def set_temp_dir(cls, v, values):
+        """一時ディレクトリのパスを設定"""
+        if v is None:
+            return values["BASE_DIR"] / "temp"
+        return Path(v)
+
+    def is_development(self) -> bool:
         """開発環境かどうかを判定する"""
-        return cls.ENV.lower() == "development"
+        return self.ENV == Environment.DEVELOPMENT
 
-    @classmethod
-    def is_production(cls) -> bool:
+    def is_production(self) -> bool:
         """本番環境かどうかを判定する"""
-        return cls.ENV.lower() == "production"
+        return self.ENV == Environment.PRODUCTION
 
-    @classmethod
-    def get(cls, key: str, default: Optional[str] = None) -> Optional[str]:
-        """
-        環境変数の値を取得する
+    def get_temp_dir(self) -> Path:
+        """一時ディレクトリのパスを取得する"""
+        return self.TEMP_DIR
 
-        Args:
-            key (str): 環境変数名
-            default (Optional[str], optional): デフォルト値
+    def validate_production(self) -> bool:
+        """本番環境用の設定を検証する"""
+        if not self.is_production():
+            return True
 
-        Returns:
-            Optional[str]: 環境変数の値
-        """
-        return os.getenv(key, default)
+        required_vars = [
+            "AZURE_OPENAI_API_KEY",
+            "AZURE_OPENAI_ENDPOINT",
+            "AZURE_OPENAI_DEPLOYMENT_NAME",
+            "COSMOS_DB_CONNECTION_STRING",
+            "COSMOS_DB_DATABASE_NAME",
+            "COSMOS_DB_CONTAINER_NAME",
+        ]
 
-    @classmethod
-    def get_temp_dir(cls) -> Path:
-        """
-        一時ディレクトリのパスを取得する
-
-        Returns:
-            Path: 一時ディレクトリのパス
-        """
-        return Path(cls.TEMP_DIR)
-
-    @classmethod
-    def validate(cls) -> bool:
-        """
-        必須の環境変数が設定されているか検証する
-
-        Returns:
-            bool: 検証結果
-        """
-        # 基本設定の検証
-        required_vars = []
-
-        # 本番環境の場合はAzure OpenAI APIの設定を検証
-        if cls.is_production():
-            required_vars.extend(
-                [
-                    "AZURE_OPENAI_API_KEY",
-                    "AZURE_OPENAI_ENDPOINT",
-                    "AZURE_OPENAI_DEPLOYMENT_NAME",
-                ]
-            )
-
-        missing_vars = [var for var in required_vars if not getattr(cls, var)]
+        missing_vars = [var for var in required_vars if not getattr(self, var)]
 
         if missing_vars:
             raise ValueError(
@@ -94,20 +86,5 @@ class Config:
         return True
 
 
-# 使用例:
-"""
-# 環境変数の取得
-api_key = Config.AZURE_OPENAI_API_KEY
-temp_dir = Config.get_temp_dir()
-
-# 環境の判定
-if Config.is_development():
-    # 開発環境用の処理
-    pass
-
-# 環境変数の検証
-try:
-    Config.validate()
-except ValueError as e:
-    print(f"設定エラー: {e}")
-"""
+# グローバル設定インスタンス
+settings = Settings()
