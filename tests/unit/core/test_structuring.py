@@ -192,6 +192,7 @@ class TestStructuringEngine:
                     y1=520,
                     font_name="Arial",
                     font_size=12,
+                    page=1,
                 ),
                 TextElement(
                     text="¥1,000",
@@ -201,6 +202,7 @@ class TestStructuringEngine:
                     y1=520,
                     font_name="Arial",
                     font_size=12,
+                    page=1,
                 ),
             ],
             2: [
@@ -212,6 +214,7 @@ class TestStructuringEngine:
                     y1=520,
                     font_name="Arial",
                     font_size=12,
+                    page=2,
                 ),
             ],
         }
