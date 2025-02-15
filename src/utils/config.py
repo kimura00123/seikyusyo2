@@ -45,14 +45,13 @@ class Settings(BaseModel):
 
     # ディレクトリ設定
     BASE_DIR: Path = Field(default=Path(__file__).parent.parent.parent)
-    TEMP_DIR: Path = None
-
-    @field_validator("TEMP_DIR", mode="before")
-    def set_temp_dir(cls, v, values):
-        """一時ディレクトリのパスを設定"""
-        if v is None:
-            return values["BASE_DIR"] / "temp"
-        return Path(v)
+    TEMP_DIR: Path = Field(
+        default_factory=lambda: (
+            Path(os.getenv("TEMP_DIR"))
+            if os.getenv("TEMP_DIR")
+            else Path(__file__).parent.parent.parent / "temp"
+        )
+    )
 
     def is_development(self) -> bool:
         """開発環境かどうかを判定する"""
@@ -64,6 +63,8 @@ class Settings(BaseModel):
 
     def get_temp_dir(self) -> Path:
         """一時ディレクトリのパスを取得する"""
+        if not self.TEMP_DIR.exists():
+            self.TEMP_DIR.mkdir(parents=True, exist_ok=True)
         return self.TEMP_DIR
 
     def validate_production(self) -> bool:

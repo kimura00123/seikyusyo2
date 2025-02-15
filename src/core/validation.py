@@ -27,9 +27,7 @@ class ValidationResult(BaseModel):
     warnings: List[ValidationError] = Field(
         default_factory=list, description="警告リスト"
     )
-    normalized_data: Optional[DocumentStructure] = Field(
-        None, description="正規化されたデータ"
-    )
+    normalized_data: Optional[Dict] = Field(None, description="正規化されたデータ")
 
 
 class ValidationRule:
@@ -203,7 +201,9 @@ class Validator:
                 is_valid=len(errors) == 0,
                 errors=errors,
                 warnings=warnings,
-                normalized_data=normalized_data,
+                normalized_data=(
+                    normalized_data.model_dump() if normalized_data else None
+                ),
             )
 
             # ログ出力
