@@ -3,7 +3,7 @@ import sys
 import logging
 from pathlib import Path
 from utils.logger import get_logger
-from utils.config import Config
+from utils.config import settings
 
 # プロジェクトルートディレクトリをPYTHONPATHに追加
 project_root = Path(__file__).parent
@@ -16,7 +16,7 @@ def setup_environment():
     """環境設定を行う"""
     try:
         # 一時ディレクトリの作成
-        temp_dir = Config.get_temp_dir()
+        temp_dir = settings.get_temp_dir
         upload_dir = temp_dir / "uploads"
         image_dir = temp_dir / "images"
         processed_dir = temp_dir / "processed"
@@ -26,16 +26,16 @@ def setup_environment():
             logger.info(f"ディレクトリを作成: {directory}")
 
         # 環境変数の検証
-        Config.validate()
+        settings.validate_production()
         logger.info("環境変数の検証が完了")
 
         # ログレベルの設定
-        log_level = getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO)
+        log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
         logging.getLogger().setLevel(log_level)
-        logger.info(f"ログレベルを設定: {Config.LOG_LEVEL}")
+        logger.info(f"ログレベルを設定: {settings.LOG_LEVEL}")
 
         # 開発環境の場合は追加の設定
-        if Config.is_development():
+        if settings.is_development():
             logger.info("開発環境で実行中")
             # 開発用の設定をここに追加
 
@@ -52,7 +52,7 @@ def cleanup_environment():
         # 一時ファイルの削除
         from utils.temp_file_manager import TempFileManager
 
-        temp_manager = TempFileManager(str(Config.get_temp_dir()))
+        temp_manager = TempFileManager(str(settings.get_temp_dir))
         temp_manager.cleanup_old_files(max_age_hours=24)
         logger.info("一時ファイルのクリーンアップが完了")
 
@@ -75,8 +75,8 @@ def main():
         import uvicorn
 
         host = "0.0.0.0"
-        port = int(Config.get("PORT", "8000"))
-        reload = Config.is_development()
+        port = settings.PORT
+        reload = settings.is_development()
 
         logger.info(f"APIサーバーを起動: {host}:{port}")
         uvicorn.run("api.main:app", host=host, port=port, reload=reload)
