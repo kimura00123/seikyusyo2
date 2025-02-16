@@ -20,10 +20,21 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QHeaderView,
+    QFileDialog,
+    QProgressBar,
 )
-from PySide6.QtCore import Qt, Signal, QSize, QKeyCombination
-from PySide6.QtGui import QIcon, QPixmap, QKeySequence, QShortcut, QColor
+from PySide6.QtCore import Qt, Signal, QSize, QKeyCombination, QMimeData, QTimer
+from PySide6.QtGui import (
+    QIcon,
+    QPixmap,
+    QKeySequence,
+    QShortcut,
+    QColor,
+    QDragEnterEvent,
+    QDropEvent,
+)
 from icons import StatusIcon
+from api_client import APIClient
 
 
 # ログ設定
@@ -100,25 +111,219 @@ class InvoiceStructuringSystem(QMainWindow):
         self.setWindowTitle("請求書構造化システム")
         self.setMinimumSize(1280, 720)
 
+        # APIクライアントの初期化
+        self.api_client = APIClient()
+
+        # 現在処理中のドキュメントID
+        self.current_document_id = None
+
         # メインウィジェットとレイアウトの設定
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
-        main_layout = QHBoxLayout(main_widget)
+        main_layout = QVBoxLayout(main_widget)
+
+        # ファイルアップロードエリアの作成
+        upload_area = self._create_upload_area()
+        main_layout.addWidget(upload_area)
+
+        # 水平レイアウトの作成（左右パネル用）
+        content_layout = QHBoxLayout()
+        main_layout.addLayout(content_layout)
 
         # 左パネル（明細一覧）の設定
         left_panel = self._create_left_panel()
-        main_layout.addWidget(left_panel)
+        content_layout.addWidget(left_panel)
 
         # 右パネル（詳細表示）の設定
         right_panel = self._create_right_panel()
-        main_layout.addWidget(right_panel)
+        content_layout.addWidget(right_panel)
 
-        # ステータスバーの設定
+        # ステータスバーとプログレスバーの設定
+        status_layout = QHBoxLayout()
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setFixedWidth(200)
+        self.progress_bar.hide()
+
         self.status_bar = self.statusBar()
+        self.status_bar.addPermanentWidget(self.progress_bar)
         self.status_bar.showMessage("準備完了")
 
         # サンプルデータの設定
         self._setup_sample_data()
+
+    def _create_upload_area(self):
+        """ファイルアップロードエリアを作成"""
+        upload_area = QWidget()
+        upload_area.setFixedHeight(120)
+        upload_area.setStyleSheet(
+            """
+            QWidget {
+                background: #f5f5f5;
+                border: 2px dashed #bdbdbd;
+                border-radius: 4px;
+            }
+            QWidget:hover {
+                background: #e3f2fd;
+                border-color: #1976d2;
+            }
+        """
+        )
+
+        # ドラッグ&ドロップを有効化
+        upload_area.setAcceptDrops(True)
+        upload_area.dragEnterEvent = self._on_drag_enter
+        upload_area.dropEvent = self._on_drop
+
+        # レイアウトの設定
+        layout = QVBoxLayout(upload_area)
+        layout.setAlignment(Qt.AlignCenter)
+
+        # アップロードアイコン
+        upload_icon = QLabel("📄")
+        upload_icon.setStyleSheet(
+            """
+            QLabel {
+                color: #1976d2;
+                font-size: 32px;
+            }
+        """
+        )
+        layout.addWidget(upload_icon, alignment=Qt.AlignCenter)
+
+        # 説明テキスト
+        upload_text = QLabel("ここにPDFファイルをドラッグ&ドロップ")
+        upload_text.setStyleSheet(
+            """
+            QLabel {
+                color: #757575;
+                font-size: 13px;
+            }
+        """
+        )
+        layout.addWidget(upload_text, alignment=Qt.AlignCenter)
+
+        # ファイル選択ボタン
+        select_button = QPushButton("ファイルを選択")
+        select_button.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #1976d2;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+                max-width: 200px;
+            }
+            QPushButton:hover {
+                background-color: #1565c0;
+            }
+            QPushButton:pressed {
+                background-color: #0d47a1;
+            }
+        """
+        )
+        select_button.clicked.connect(self._on_select_file)
+        layout.addWidget(select_button, alignment=Qt.AlignCenter)
+
+        return upload_area
+
+    def _on_drag_enter(self, event: QDragEnterEvent):
+        """ドラッグ&ドロップのドラッグ開始時の処理"""
+        mime_data = event.mimeData()
+        if mime_data.hasUrls():
+            urls = mime_data.urls()
+            if len(urls) == 1 and urls[0].toLocalFile().lower().endswith(".pdf"):
+                event.acceptProposedAction()
+
+    def _on_drop(self, event: QDropEvent):
+        """ドラッグ&ドロップのドロップ時の処理"""
+        mime_data = event.mimeData()
+        if mime_data.hasUrls():
+            url = mime_data.urls()[0]
+            file_path = url.toLocalFile()
+            if file_path.lower().endswith(".pdf"):
+                self._process_pdf_file(file_path)
+
+    def _on_select_file(self):
+        """ファイル選択ダイアログを表示"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "PDFファイルを選択", "", "PDFファイル (*.pdf)"
+        )
+        if file_path:
+            self._process_pdf_file(file_path)
+
+    def _process_pdf_file(self, file_path: str):
+        """PDFファイルの処理を開始"""
+        try:
+            logger.info(f"PDFファイルの処理を開始: {file_path}")
+            self.status_bar.showMessage("ファイルをアップロード中...")
+            self.progress_bar.setRange(0, 100)
+            self.progress_bar.setValue(0)
+            self.progress_bar.show()
+
+            # APIクライアントを使用してファイルをアップロード
+            result = self.api_client.upload_document(file_path)
+            self.current_document_id = result["document_id"]
+
+            # 処理状態の監視を開始
+            self._start_status_monitoring()
+
+            logger.info(f"ファイルのアップロードが完了: {self.current_document_id}")
+            self.status_bar.showMessage("ファイルのアップロードが完了しました")
+
+        except Exception as e:
+            logger.error(f"ファイル処理でエラーが発生: {e}", exc_info=True)
+            self.status_bar.showMessage(f"エラー: {str(e)}")
+            self.progress_bar.hide()
+
+    def _start_status_monitoring(self):
+        """処理状態の監視を開始"""
+        if not self.current_document_id:
+            return
+
+        try:
+            # 処理状態を取得
+            status = self.api_client.get_processing_status(self.current_document_id)
+
+            # プログレスバーを更新
+            self.progress_bar.setValue(status["progress"])
+            self.status_bar.showMessage(status["message"])
+
+            # 処理が完了した場合
+            if status["status"] == "completed":
+                self.progress_bar.hide()
+                self._load_document_data()
+            elif status["status"] == "error":
+                self.progress_bar.hide()
+                self.status_bar.showMessage(f"エラー: {status['message']}")
+            else:
+                # 処理中の場合は再度ステータスをチェック
+                QTimer.singleShot(1000, self._start_status_monitoring)
+
+        except Exception as e:
+            logger.error(f"状態監視でエラーが発生: {e}", exc_info=True)
+            self.status_bar.showMessage(f"エラー: {str(e)}")
+            self.progress_bar.hide()
+
+    def _load_document_data(self):
+        """処理済みデータの読み込み"""
+        try:
+            # バリデーション結果を取得
+            validation_result = self.api_client.get_validation_result(
+                self.current_document_id
+            )
+
+            # 明細画像を取得
+            image_result = self.api_client.get_detail_images(self.current_document_id)
+
+            # TODO: 取得したデータを使用してUIを更新
+            logger.info("ドキュメントデータの読み込みが完了")
+            self.status_bar.showMessage("ドキュメントの読み込みが完了しました")
+
+        except Exception as e:
+            logger.error(f"データ読み込みでエラーが発生: {e}", exc_info=True)
+            self.status_bar.showMessage(f"エラー: {str(e)}")
 
     def _create_left_panel(self):
         left_panel = QWidget()
