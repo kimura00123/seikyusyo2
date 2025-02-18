@@ -315,9 +315,71 @@ class InvoiceStructuringSystem(QMainWindow):
             )
 
             # 明細画像を取得
-            image_result = self.api_client.get_detail_images(self.current_document_id)
+            image_paths = self.api_client.get_detail_images(self.current_document_id)
 
-            # TODO: 取得したデータを使用してUIを更新
+            # 画像をキャッシュに保存
+            self.image_cache = {}
+            for path in image_paths:
+                image = QPixmap(path)
+                if not image.isNull():
+                    self.image_cache[path] = image
+
+            # 明細一覧をクリア
+            self.detail_list.clear()
+
+            # 処理状態から明細データを取得
+            status = self.api_client.get_processing_status(self.current_document_id)
+            if status["status"] == "completed":
+                structured_data = status.get("data", {}).get("structured_data", {})
+
+                # 明細データを作成
+                for customer in structured_data.get("customers", []):
+                    for entry in customer.get("entries", []):
+                        if entry is not None:
+                            # 金額の処理
+                            amount_str = entry.get("amount", "0")
+                            if isinstance(amount_str, str):
+                                amount_str = amount_str.replace("¥", "").replace(
+                                    ",", ""
+                                )
+                            price = int(amount_str)
+
+                            # 税率の処理
+                            tax_rate_str = entry.get("tax_rate", "0")
+                            if isinstance(tax_rate_str, str):
+                                tax_rate_str = tax_rate_str.replace("%", "")
+                            tax_rate = int(tax_rate_str)
+
+                            # 在庫情報の処理
+                            stock_info = entry.get("stock_info", {})
+                            if stock_info is None:
+                                stock_info = {}
+
+                            detail_data = {
+                                "id": entry.get("no"),
+                                "no": f"No.{entry.get('no')}",
+                                "customer": customer.get("customer_name"),
+                                "product": entry.get("description"),
+                                "quantity": entry.get("quantity", 0),
+                                "price": price,
+                                "status": "unconfirmed",
+                                "tax_rate": tax_rate,
+                                "stock": {
+                                    "carryover": stock_info.get("carryover", 0),
+                                    "incoming": stock_info.get("incoming", 0),
+                                    "outgoing": stock_info.get("outgoing", 0),
+                                    "balance": stock_info.get("remaining", 0),
+                                },
+                            }
+
+                            # 明細アイテムを作成
+                            item = DetailListItem(detail_data, validation_result)
+                            self.detail_list.addItem(item)
+
+            # 最初の明細を選択
+            if self.detail_list.count() > 0:
+                self.detail_list.setCurrentRow(0)
+
             logger.info("ドキュメントデータの読み込みが完了")
             self.status_bar.showMessage("ドキュメントの読み込みが完了しました")
 
@@ -714,6 +776,65 @@ class InvoiceStructuringSystem(QMainWindow):
         logger.info(f"明細詳細を表示: {detail_data['no']}")
         self.status_bar.showMessage(f"明細 {detail_data['no']} の詳細を表示中")
 
+        # 画像の表示
+        if hasattr(self, "image_cache"):
+            # 明細番号に対応する画像を探す
+            detail_no = detail_data["no"].replace("No.", "")
+            image_path = next(
+                (
+                    path
+                    for path in self.image_cache.keys()
+                    if f"detail{detail_no}" in path
+                ),
+                None,
+            )
+            if image_path and self.image_cache[image_path]:
+                # 画像を表示
+                scene = QGraphicsScene()
+                pixmap = self.image_cache[image_path]
+                scene.addPixmap(pixmap)
+                self.image_view.setScene(scene)
+                self.image_view.fitInView(scene.sceneRect(), Qt.KeepAspectRatio)
+
+                # リサイズイベントを設定
+                def resize_event(event):
+                    self.image_view.fitInView(scene.sceneRect(), Qt.KeepAspectRatio)
+                    QGraphicsView.resizeEvent(self.image_view, event)
+
+                self.image_view.resizeEvent = resize_event
+            else:
+                # 画像が見つからない場合はプレースホルダーを表示
+                placeholder_scene = QGraphicsScene()
+                placeholder_container = QWidget()
+                placeholder_container.setStyleSheet("background: transparent;")
+                placeholder_layout = QVBoxLayout(placeholder_container)
+                placeholder_layout.setAlignment(Qt.AlignCenter)
+
+                placeholder_icon = QLabel("📄")
+                placeholder_icon.setStyleSheet(
+                    """
+                    QLabel {
+                        color: #bdbdbd;
+                        font-size: 32px;
+                    }
+                    """
+                )
+                placeholder_layout.addWidget(placeholder_icon, alignment=Qt.AlignCenter)
+
+                placeholder_text = QLabel("明細画像")
+                placeholder_text.setStyleSheet(
+                    """
+                    QLabel {
+                        color: #757575;
+                        font-size: 13px;
+                    }
+                    """
+                )
+                placeholder_layout.addWidget(placeholder_text, alignment=Qt.AlignCenter)
+
+                placeholder_scene.addWidget(placeholder_container)
+                self.image_view.setScene(placeholder_scene)
+
         # グリッドをクリア
         self.data_grid.setRowCount(0)
 
@@ -989,94 +1110,8 @@ class InvoiceStructuringSystem(QMainWindow):
                 item.setBackground(QColor(255, 255, 255))  # 白色
 
     def _setup_sample_data(self):
-        # サンプルデータ（ステータスのバリエーションを含む）
-        sample_details = [
-            {
-                "id": "1",
-                "no": "No.1",
-                "customer": "顧客A",
-                "product": "製品A",
-                "quantity": 100,
-                "price": 1000,
-                "status": "approved",
-                "tax_rate": 10,
-                "stock": {
-                    "carryover": 100,
-                    "incoming": 50,
-                    "outgoing": 30,
-                    "balance": 120,
-                },
-            },
-            {
-                "id": "2",
-                "no": "No.2",
-                "customer": "顧客B",
-                "product": "製品B",
-                "quantity": 200,
-                "price": 2000,
-                "status": "error",
-                "tax_rate": 10,
-                "stock": {
-                    "carryover": 150,
-                    "incoming": 30,
-                    "outgoing": 40,
-                    "balance": 140,
-                },
-            },
-            {
-                "id": "3",
-                "no": "No.3",
-                "customer": "顧客C",
-                "product": "製品C",
-                "quantity": 150,
-                "price": 1500,
-                "status": "unconfirmed",
-                "tax_rate": 8,
-                "stock": {
-                    "carryover": 80,
-                    "incoming": 40,
-                    "outgoing": 20,
-                    "balance": 100,
-                },
-            },
-            {
-                "id": "4",
-                "no": "No.4",
-                "customer": "顧客D",
-                "product": "製品D",
-                "quantity": 300,
-                "price": 3000,
-                "status": "pending",
-                "tax_rate": 10,
-                "stock": {
-                    "carryover": 200,
-                    "incoming": 100,
-                    "outgoing": 50,
-                    "balance": 250,
-                },
-            },
-            {
-                "id": "5",
-                "no": "No.5",
-                "customer": "顧客E",
-                "product": "製品E",
-                "quantity": 250,
-                "price": 2500,
-                "status": "unconfirmed",
-                "tax_rate": 8,
-                "stock": {
-                    "carryover": 120,
-                    "incoming": 60,
-                    "outgoing": 40,
-                    "balance": 140,
-                },
-            },
-        ]
-
-        # 明細一覧にデータを追加
-        for detail in sample_details:
-            item = DetailListItem(detail)
-            self.detail_list.addItem(item)
+        """初期化時のサンプルデータ設定（現在は不要）"""
+        pass
 
 
 def main():

@@ -34,7 +34,7 @@ graph TD
 ```mermaid
 graph TB
     subgraph "フロントエンド"
-        A[PySide6 UI]
+        A[React UI]
         B[請求書表示コンポーネント]
         C[編集コンポーネント]
     end
@@ -63,8 +63,11 @@ graph TB
 
 ### 2.2 使用技術スタック
 - **フロントエンド**
-  - PySide6：デスクトップUIフレームワーク
-  - Qt Quick：UIコンポーネント
+  - React：UIライブラリ
+  - TypeScript：型システム
+  - Material-UI：UIコンポーネント
+  - Axios：APIクライアント
+  - Zustand：状態管理
 
 - **バックエンド**
   - Python 3.10：基本実行環境
@@ -81,7 +84,7 @@ graph TB
 ### 2.3 インフラストラクチャ構成
 ```mermaid
 graph LR
-    A[クライアントPC] --> B[Azure Web App Service]
+    A[ブラウザ] --> B[Azure Static Web Apps]
     B --> C[Azure OpenAI Service]
     B --> D[Azure CosmosDB]
     B --> E[ローカルストレージ]

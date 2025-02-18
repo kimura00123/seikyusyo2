@@ -1,6 +1,30 @@
 import { create } from 'zustand';
 import { DocumentStructure, ValidationResult, documentApi } from '../services/api';
 
+interface DetailWithCustomer {
+  no: string;
+  description: string;
+  tax_rate: string;
+  amount: string;
+  stock_info?: {
+    carryover: number;
+    incoming: number;
+    w_value: number;
+    outgoing: number;
+    remaining: number;
+    total: number;
+    unit_price: number;
+  };
+  quantity_info?: {
+    quantity: number;
+    unit_price?: number;
+  };
+  date_range?: string;
+  page_no: number;
+  customer_code: string;
+  customer_name: string;
+}
+
 interface DocumentState {
   // 状態
   taskId: string | null;
@@ -8,12 +32,15 @@ interface DocumentState {
   document: DocumentStructure | null;
   validation: ValidationResult | null;
   error: string | null;
+  selectedDetail: DetailWithCustomer | null;
 
   // アクション
   uploadDocument: (file: File) => Promise<void>;
   checkStatus: () => Promise<void>;
   getValidation: () => Promise<void>;
   reset: () => void;
+  selectDetail: (detail: DetailWithCustomer) => void;
+  clearSelectedDetail: () => void;
 }
 
 export const useDocumentStore = create<DocumentState>((set, get) => ({
@@ -23,6 +50,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   document: null,
   validation: null,
   error: null,
+  selectedDetail: null,
 
   // アクション
   uploadDocument: async (file: File) => {
@@ -92,6 +120,17 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       document: null,
       validation: null,
       error: null,
+      selectedDetail: null,
     });
   },
+
+  selectDetail: (detail: DetailWithCustomer) => {
+    set({ selectedDetail: detail });
+  },
+
+  clearSelectedDetail: () => {
+    set({ selectedDetail: null });
+  },
 }));
+
+export type { DetailWithCustomer };

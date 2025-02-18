@@ -3,6 +3,7 @@ import logging
 from typing import Dict, Optional
 import requests
 from requests.exceptions import RequestException
+from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
 
@@ -71,9 +72,9 @@ class APIClient:
             }
         """
         try:
-            response = self.session.get(
-                f"{self.base_url}/document/status/{document_id}"
-            )
+            # URLエンコードしたdocument_idを使用
+            encoded_id = quote(document_id)
+            response = self.session.get(f"{self.base_url}/document/status/{encoded_id}")
             response.raise_for_status()
             return response.json()
 
@@ -97,8 +98,10 @@ class APIClient:
             }
         """
         try:
+            # URLエンコードしたdocument_idを使用
+            encoded_id = quote(document_id)
             response = self.session.get(
-                f"{self.base_url}/document/validation/{document_id}"
+                f"{self.base_url}/document/validation/{encoded_id}"
             )
             response.raise_for_status()
             return response.json()
@@ -123,8 +126,10 @@ class APIClient:
         """
         try:
             params = {"page": page} if page is not None else None
+            # URLエンコードしたdocument_idを使用
+            encoded_id = quote(document_id)
             response = self.session.get(
-                f"{self.base_url}/document/images/{document_id}", params=params
+                f"{self.base_url}/document/images/{encoded_id}", params=params
             )
             response.raise_for_status()
             return response.json()
@@ -145,8 +150,10 @@ class APIClient:
             str: ダウンロードしたファイルのパス
         """
         try:
+            # URLエンコードしたdocument_idを使用
+            encoded_id = quote(document_id)
             response = self.session.get(
-                f"{self.base_url}/document/download/{document_id}", stream=True
+                f"{self.base_url}/document/download/{encoded_id}", stream=True
             )
             response.raise_for_status()
 

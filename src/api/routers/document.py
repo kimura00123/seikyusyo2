@@ -35,6 +35,7 @@ class ProcessingStatus(BaseModel):
     progress: int
     message: str
     errors: List[str] = []
+    data: Optional[dict] = None
 
 
 router = APIRouter()
@@ -131,6 +132,11 @@ async def upload_document(request: Request, file: UploadFile = File(...)):
                 ]
                 logger.warning(f"バリデーションエラーを検出: {document_id}")
 
+            # バリデーション結果をキャッシュ
+            if not hasattr(request.app.state, "validation_results"):
+                request.app.state.validation_results = {}
+            request.app.state.validation_results[document_id] = validation_result
+
             # 明細画像の抽出
             image_processor = ImageProcessor()
             regions = image_processor.extract_detail_regions(str(pdf_path))
@@ -161,7 +167,7 @@ async def upload_document(request: Request, file: UploadFile = File(...)):
                     "pdf_filename": file.filename,
                     "excel_path": str(excel_path),
                     "image_count": len(image_paths),
-                    "structured_data": structured_data,  # 辞書オブジェクトをそのまま使用
+                    "structured_data": structured_data.dict(),  # Pydanticモデルをdict形式に変換
                 },
                 "validation_results": {
                     "is_valid": validation_result.is_valid,
@@ -235,20 +241,58 @@ async def get_processing_status(
             status_code=404, detail="指定されたドキュメントが見つかりません"
         )
 
-    status_data = request.app.state.processing_status[document_id]
+    status_data = request.app.state.processing_status[document_id].copy()
+
+    # 処理が完了している場合は構造化データを含める
+    if status_data["status"] == "completed":
+        validation_result = request.app.state.validation_results.get(document_id)
+        if validation_result:
+            status_data["data"] = {
+                "structured_data": validation_result.normalized_data,
+                "validation_results": {
+                    "is_valid": validation_result.is_valid,
+                    "errors": [
+                        {"field": e.field, "message": e.message}
+                        for e in validation_result.errors
+                    ],
+                    "warnings": [
+                        {"field": w.field, "message": w.message}
+                        for w in validation_result.warnings
+                    ],
+                },
+            }
+
     logger.info(f"処理状態を取得: {document_id} - {status_data['status']}")
     return ProcessingStatus(**status_data)
 
 
 @router.get("/validation/{document_id}")
 async def get_validation_result(
-    document_id: str = Path(..., description="ドキュメントID")
+    request: Request, document_id: str = Path(..., description="ドキュメントID")
 ) -> ValidationResponse:
     """バリデーション結果を取得する"""
     try:
-        # バリデーション結果の取得
-        validator = Validator()
-        result = validator.get_validation_result(document_id)
+        # キャッシュされたバリデーション結果を取得
+        if (
+            not hasattr(request.app.state, "validation_results")
+            or document_id not in request.app.state.validation_results
+        ):
+            raise HTTPException(
+                status_code=404, detail="バリデーション結果が見つかりません"
+            )
+
+        validation_result = request.app.state.validation_results[document_id]
+        result = {
+            "is_valid": validation_result.is_valid,
+            "errors": [
+                {"field": e.field, "message": e.message}
+                for e in validation_result.errors
+            ],
+            "warnings": [
+                {"field": w.field, "message": w.message}
+                for w in validation_result.warnings
+            ],
+        }
 
         if result is None:
             raise HTTPException(
@@ -256,7 +300,11 @@ async def get_validation_result(
             )
 
         logger.info(f"バリデーション結果を取得: {document_id}")
-        return ValidationResponse(**result)
+        return ValidationResponse(
+            is_valid=result["is_valid"],
+            errors=[ValidationError(**error) for error in result["errors"]],
+            warnings=[ValidationWarning(**warning) for warning in result["warnings"]],
+        )
 
     except Exception as e:
         logger.error(f"バリデーション結果の取得でエラー: {e}", exc_info=True)

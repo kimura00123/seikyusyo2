@@ -150,22 +150,13 @@ class StructuringEngine:
                 azure_endpoint=self.endpoint,
             )
 
-            # プロンプトの構築
-            prompt = self._build_prompt(text)
-
-            # APIの呼び出しとレスポンスの取得
-            completion = await client.beta.chat.completions.parse(
-                model=self.deployment_name,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """
+            # システムプロンプトの構築
+            system_prompt = """
 請求書のテキストから顧客情報と明細を抽出し、構造化データとして出力してください。
-対象のPDFファイル名は "{pdf_filename}" です。
 以下の重要な処理ルールに従ってください：
 
 0. 文書全体の情報抽出：
-   - 文書全体のPDFファイル名："{pdf_filename}" を使用
+   - 文書全体のPDFファイル名を使用
    - 文書全体の請求合計額：「ご請求合計額」の後に続く金額（例：¥682,559）を抽出
    - これらの情報はDocumentStructureレベルで保持する
 
@@ -181,7 +172,6 @@ class StructuringEngine:
    - 改ページによってヘッダーが挿入されても、顧客情報の連続性は維持する
    - 前のページの顧客に関する明細は、ヘッダーをまたいでも同じ顧客の明細として処理する
 
-
 3. 明細の抽出ルール：
    - 明細番号（No）は連続性を保つ
    - 明細の基本情報（明細番号、摘要、消費税率、金額）を抽出
@@ -192,8 +182,8 @@ class StructuringEngine:
 4. データ形式：
    - 顧客コード: 'F'で始まる形式で抽出 (例: F034)
    - 会社名と部署:
-    - 会社名は「株式会社」「㈱」で終わる部分
-    - 残りを部署として扱う
+     - 会社名は「株式会社」「㈱」で終わる部分
+     - 残りを部署として扱う
    - 金額: ¥マークを付けて表示
    - 日付: 元の形式を保持 (例: 2024/08月分(2024/08/01 - 2024/08/31))
    - 数量情報と在庫情報は別々のオブジェクトとして管理
@@ -203,9 +193,14 @@ class StructuringEngine:
 - テーブルのカラムヘッダー行（|No|摘 要|消費税率|金 額|）は無視する
 - 改ページマーカー（-----）は無視する
 - 同じ顧客の明細は、ページをまたいでも一つの配列にまとめる
-""",
-                    },
-                    {"role": "user", "content": prompt},
+"""
+
+            # APIの呼び出しとレスポンスの取得
+            completion = await client.beta.chat.completions.parse(
+                model=self.deployment_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": self._build_prompt(text)},
                 ],
                 response_format=DocumentStructure,
             )

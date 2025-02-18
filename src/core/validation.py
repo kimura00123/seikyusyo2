@@ -110,19 +110,38 @@ class ValidationRule:
         if not date_range:
             return None  # 日付範囲は任意
 
-        # YYYY/MM/DD-YYYY/MM/DD 形式を期待
-        pattern = r"^\d{4}/\d{2}/\d{2}-\d{4}/\d{2}/\d{2}$"
-        if not re.match(pattern, date_range):
-            return "日付範囲の形式が不正です（YYYY/MM/DD-YYYY/MM/DD）"
+        # 月次形式（例：2024/08月分(2024/08/01 - 2024/08/31)）
+        month_pattern = (
+            r"^\d{4}/\d{2}月分\(\d{4}/\d{2}/\d{2}\s*-\s*\d{4}/\d{2}/\d{2}\)$"
+        )
+        # 日次形式（例：YYYY/MM/DD-YYYY/MM/DD）
+        daily_pattern = r"^\d{4}/\d{2}/\d{2}-\d{4}/\d{2}/\d{2}$"
+
+        if not (
+            re.match(month_pattern, date_range) or re.match(daily_pattern, date_range)
+        ):
+            return None  # 警告を出さないように変更
 
         try:
-            start_date, end_date = date_range.split("-")
-            start = datetime.strptime(start_date, "%Y/%m/%d")
-            end = datetime.strptime(end_date, "%Y/%m/%d")
+            if "月分" in date_range:
+                # 月次形式の場合は括弧内の日付を取得
+                dates = re.search(
+                    r"\((\d{4}/\d{2}/\d{2})\s*-\s*(\d{4}/\d{2}/\d{2})\)", date_range
+                )
+                if dates:
+                    start_date, end_date = dates.groups()
+                else:
+                    return None
+            else:
+                # 日次形式の場合は直接分割
+                start_date, end_date = date_range.split("-")
+
+            start = datetime.strptime(start_date.strip(), "%Y/%m/%d")
+            end = datetime.strptime(end_date.strip(), "%Y/%m/%d")
             if end < start:
                 return "終了日は開始日以降である必要があります"
         except ValueError:
-            return "日付の形式が不正です"
+            return None  # 警告を出さないように変更
 
         return None
 
@@ -241,10 +260,21 @@ class Validator:
                 return {
                     "is_valid": result.is_valid,
                     "errors": [
-                        {"field": e.field, "message": e.message} for e in result.errors
+                        {
+                            "field": e.field,
+                            "message": e.message,
+                            "severity": e.severity,
+                            "value": e.value,
+                        }
+                        for e in result.errors
                     ],
                     "warnings": [
-                        {"field": w.field, "message": w.message}
+                        {
+                            "field": w.field,
+                            "message": w.message,
+                            "severity": w.severity,
+                            "value": w.value,
+                        }
                         for w in result.warnings
                     ],
                 }

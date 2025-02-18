@@ -11,7 +11,7 @@ takatuski/
 ├── pyproject.toml         # プロジェクト設定・依存関係
 ├── requirements.lock      # 依存関係のロックファイル
 ├── requirements-dev.lock  # 開発環境用依存関係のロックファイル
-├── src/                   # ソースコード
+├── src/                   # バックエンドソースコード
 │   ├── api/              # APIエンドポイント
 │   │   ├── __init__.py
 │   │   ├── main.py      # FastAPIメインアプリケーション
@@ -30,10 +30,17 @@ takatuski/
 │       ├── config.py    # 設定管理
 │       ├── logger.py    # ログ機能
 │       └── temp_file_manager.py  # 一時ファイル管理
-└── invoice-system/      # フロントエンド（PySide6）
-    ├── main.py         # フロントエンドメイン
-    ├── api_client.py   # APIクライアント
-    └── icons.py        # アイコンリソース
+└── frontend/            # フロントエンド（React + TypeScript）
+    ├── src/             # Reactソースコード
+    │   ├── components/  # UIコンポーネント
+    │   ├── hooks/      # カスタムフック
+    │   ├── services/   # APIサービス
+    │   ├── store/      # 状態管理
+    │   ├── types/      # 型定義
+    │   └── utils/      # ユーティリティ
+    ├── public/         # 静的ファイル
+    ├── package.json    # 依存関係
+    └── tsconfig.json   # TypeScript設定
 ```
 
 ### 1.2 重要なファイルの説明と役割
@@ -51,17 +58,17 @@ takatuski/
 - `src/utils/temp_file_manager.py`: 一時ファイルの管理を行う。
 
 #### フロントエンド
-- `invoice-system/main.py`: PySide6ベースのGUIアプリケーション。
-- `invoice-system/api_client.py`: バックエンドAPIとの通信を担当。
-- `invoice-system/icons.py`: UIで使用するアイコンリソース。
+- `frontend/src/components/`: Reactコンポーネント群
+- `frontend/src/services/`: APIクライアントとサービス
+- `frontend/src/store/`: Zustandによる状態管理
+- `frontend/src/types/`: TypeScript型定義
 
 ### 1.3 依存関係の概要
 
-#### プロダクション依存関係
+#### バックエンド依存関係
 ```toml
 [project]
 dependencies = [
-    "pyside6>=6.8.2.1",        # GUIフレームワーク
     "fastapi>=0.104.1",        # WebフレームワークAPI
     "uvicorn>=0.24.0",         # ASGIサーバー
     "gunicorn>=21.2.0",        # Productionサーバー
@@ -74,6 +81,26 @@ dependencies = [
     "openai>=1.12.0",          # Azure OpenAI API
     "pytesseract>=0.3.10",     # OCR機能
 ]
+```
+
+#### フロントエンド依存関係
+```json
+{
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@mui/material": "^5.15.0",
+    "@emotion/react": "^11.11.0",
+    "@emotion/styled": "^11.11.0",
+    "axios": "^1.6.0",
+    "zustand": "^4.5.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0"
+  }
+}
 ```
 
 ## 2. プロジェクト全体像セクション
@@ -276,8 +303,11 @@ dependencies = [
 - OpenPyXL 3.1.2
 
 ### 5.2 フロントエンド
-- PySide6 6.8.2.1
-- Qt Quick
+- React 18.2.0
+- TypeScript 5.0.0
+- Material-UI 5.15.0
+- Axios 1.6.0
+- Zustand 4.5.0
 
 ### 5.3 データベース
 - Azure CosmosDB（未実装）
@@ -304,8 +334,9 @@ dependencies = [
 # バックエンドサーバー
 python src/startup.py
 
-# フロントエンド
-python invoice-system/main.py
+# フロントエンド開発サーバー
+cd frontend
+npm run dev
 ```
 
 ## 7. 制約条件セクション
