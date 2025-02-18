@@ -77,19 +77,19 @@ export const documentApi = {
       status: 'pending' | 'processing' | 'completed' | 'failed';
       result?: DocumentStructure;
       error?: string;
-    }>(`/documents/${taskId}/status`);
+    }>(`/documents/status/${taskId}`);
     return response.data;
   },
 
   // バリデーション結果を取得
   getValidationResult: async (taskId: string) => {
-    const response = await api.get<ValidationResult>(`/documents/${taskId}/validation`);
+    const response = await api.get<ValidationResult>(`/documents/validation/${taskId}`);
     return response.data;
   },
 
   // 明細画像を取得
   getDetailImage: async (taskId: string, detailNo: string) => {
-    const response = await api.get<Blob>(`/documents/${taskId}/details/${detailNo}/image`, {
+    const response = await api.get<Blob>(`/documents/images/${taskId}/${detailNo}`, {
       responseType: 'blob',
     });
     return response.data;
@@ -97,7 +97,7 @@ export const documentApi = {
 
   // エクセルファイルをダウンロード
   downloadExcel: async (taskId: string) => {
-    const response = await api.get<Blob>(`/documents/${taskId}/excel`, {
+    const response = await api.get<Blob>(`/documents/excel/${taskId}`, {
       responseType: 'blob',
     });
     return response.data;

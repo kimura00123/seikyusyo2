@@ -18,7 +18,7 @@ app = FastAPI(
 # CORSミドルウェアの設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 本番環境では適切に制限する
+    allow_origins=["http://localhost:3000"],  # フロントエンドのURL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -89,12 +89,12 @@ async def health_check():
 
 
 # ルーターの登録
-from src.api.routers import document_router
+from .routers import document_router
 
 app.include_router(
     document_router,
-    prefix="/document",
-    tags=["document"],
+    prefix="/documents",  # プレフィックスを/documentsに変更
+    tags=["documents"],
 )
 
 
