@@ -14,8 +14,13 @@ import {
   TableCell,
   TableContainer,
   TableRow,
-  CircularProgress
+  CircularProgress,
+  IconButton,
+  styled
 } from '@mui/material';
+import ZoomInIcon from '@mui/icons-material/ZoomIn';
+import ZoomOutIcon from '@mui/icons-material/ZoomOut';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { useDocumentStore } from '../store/documentStore';
 import { documentApi } from '../services/api';
 
@@ -28,6 +33,61 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
   const { selectedDetail, taskId } = useDocumentStore();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [zoom, setZoom] = useState(1);
+
+  // スタイル付きコンポーネント
+  const ImageContainer = styled('div')({
+    width: '100%',
+    height: '200px',  // 画像表示エリアの高さを調整
+    overflow: 'auto',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f5f5f5',
+    position: 'relative',
+  });
+
+  const ZoomControls = styled('div')({
+    position: 'absolute',
+    top: '10px',
+    right: '10px',
+    display: 'flex',
+    gap: '8px',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    padding: '4px',
+    borderRadius: '4px',
+    zIndex: 1,
+  });
+
+  const StyledImage = styled('img')({
+    width: '100%',  // 常に親要素の幅いっぱいに表示
+    height: 'auto',
+    objectFit: 'contain',
+    transition: 'transform 0.2s ease',
+    transformOrigin: 'center center',  // 中心を基準にズーム
+  });
+
+  // ズーム操作
+  const handleZoomIn = () => {
+    setZoom(prev => Math.min(prev * 1.2, 3));
+  };
+
+  const handleZoomOut = () => {
+    setZoom(prev => Math.max(prev * 0.8, 0.5));
+  };
+
+  const handleResetZoom = () => {
+    setZoom(1);
+  };
+
+  // ホイールイベントでのズーム
+  const handleWheel = (e: React.WheelEvent) => {
+    if (e.ctrlKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.8 : 1.2;
+      setZoom(prev => Math.min(Math.max(prev * delta, 0.5), 3));
+    }
+  };
 
   useEffect(() => {
     const loadImage = async () => {
@@ -36,6 +96,10 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
       try {
         setLoading(true);
         const blob = await documentApi.getDetailImage(taskId, selectedDetail.no);
+        // 古いURLを解放してから新しいURLを設定
+        if (imageUrl) {
+          URL.revokeObjectURL(imageUrl);
+        }
         const url = URL.createObjectURL(blob);
         setImageUrl(url);
       } catch (error) {
@@ -49,14 +113,14 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
       loadImage();
     }
 
+    // コンポーネントのアンマウント時のみクリーンアップを実行
     return () => {
-      // クリーンアップ時に画像URLを解放
       if (imageUrl) {
         URL.revokeObjectURL(imageUrl);
+        setImageUrl(null);
       }
-      setImageUrl(null);
     };
-  }, [open, selectedDetail, taskId, imageUrl]);
+  }, [open, selectedDetail, taskId]); // imageUrlを依存配列から削除
 
   if (!selectedDetail) return null;
 
@@ -72,15 +136,56 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
     <Dialog
       open={open}
       onClose={onClose}
-      maxWidth="md"
+      maxWidth="xl"
       fullWidth
+      PaperProps={{
+        sx: {
+          maxHeight: '90vh',  // ビューポートの90%の高さまで許可
+          height: '90vh',     // 固定の高さを設定
+        }
+      }}
     >
       <DialogTitle>
         明細詳細：{selectedDetail.no}
       </DialogTitle>
       <DialogContent>
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+        <Grid container spacing={3} direction="column">
+          <Grid item xs={12}>
+            <Typography variant="subtitle1" gutterBottom>
+              明細画像
+            </Typography>
+            <ImageContainer onWheel={handleWheel}>
+              <ZoomControls>
+                <IconButton onClick={handleZoomIn} size="small">
+                  <ZoomInIcon />
+                </IconButton>
+                <IconButton onClick={handleZoomOut} size="small">
+                  <ZoomOutIcon />
+                </IconButton>
+                <IconButton onClick={handleResetZoom} size="small">
+                  <RestartAltIcon />
+                </IconButton>
+              </ZoomControls>
+              {loading ? (
+                <CircularProgress />
+              ) : imageUrl ? (
+                <StyledImage
+                  src={imageUrl}
+                  alt="明細画像"
+                  style={{
+                    transform: `scale(${zoom})`,
+                    cursor: zoom !== 1 ? 'move' : 'default',
+                  }}
+                />
+              ) : (
+                <Typography color="text.secondary">
+                  画像を読み込めませんでした
+                </Typography>
+              )}
+            </ImageContainer>
+          </Grid>
+
+          <Grid item xs={12}>
             <Typography variant="subtitle1" gutterBottom>
               基本情報
             </Typography>
@@ -180,36 +285,6 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
             )}
           </Grid>
 
-          <Grid item xs={12} md={6}>
-            <Typography variant="subtitle1" gutterBottom>
-              明細画像
-            </Typography>
-            <Paper
-              variant="outlined"
-              sx={{
-                p: 1,
-                height: '100%',
-                minHeight: 200,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              {loading ? (
-                <CircularProgress />
-              ) : imageUrl ? (
-                <img
-                  src={imageUrl}
-                  alt="明細画像"
-                  style={{ maxWidth: '100%', maxHeight: '400px' }}
-                />
-              ) : (
-                <Typography color="text.secondary">
-                  画像を読み込めませんでした
-                </Typography>
-              )}
-            </Paper>
-          </Grid>
         </Grid>
       </DialogContent>
       <DialogActions>
