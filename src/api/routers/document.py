@@ -1,7 +1,8 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
-from fastapi.responses import FileResponse
 from typing import Dict, Any
 import os
+from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import FileResponse
+from src.utils.logger import get_logger
 from src.core.pdf_parser import PDFParser
 from src.core.structuring import StructuringEngine
 from src.core.validation import ValidationEngine
@@ -9,7 +10,10 @@ from src.core.image_processor import ImageProcessor
 from src.core.excel_exporter import ExcelExporter
 from src.utils.temp_file_manager import TempFileManager
 
-router = APIRouter(prefix="/documents", tags=["documents"])
+# ロガーの設定
+logger = get_logger(__name__)
+
+router = APIRouter(tags=["documents"])
 
 # 一時ファイル管理
 temp_manager = TempFileManager(temp_dir=os.path.join(os.getcwd(), "temp"))
@@ -34,13 +38,14 @@ async def upload_document(file: UploadFile = File(...)) -> Dict[str, str]:
         structurer = StructuringEngine()
         document = structurer.structure_invoice(text_elements)
 
-        # 結果を一時保存
-        temp_manager.save_result(task_id, document)
+        # 結果を一時保存（辞書形式に変換）
+        temp_manager.save_result(task_id, document.model_dump())
 
         return {"task_id": task_id}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"アップロード処理でエラー: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/status/{task_id}")
