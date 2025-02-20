@@ -74,17 +74,37 @@ const EditableCell = styled(TableCell)(({ theme }) => ({
   '&.editable': {
     backgroundColor: alpha(theme.palette.primary.main, 0.08),
     borderLeft: `2px solid ${theme.palette.primary.main}`,
-  }
+  },
+  padding: '8px',  // セルのパディングを調整
 }));
 
 const StyledTextField = styled(TextField)({
   '& .MuiInputBase-root': {
-    height: '32px',  // 高さを固定
+    height: '28px',  // 高さを小さく
+    minHeight: '28px',
   },
   '& .MuiOutlinedInput-input': {
     padding: '4px 8px',  // パディングを調整
     fontSize: '0.875rem',  // フォントサイズを調整
   },
+  '& .MuiOutlinedInput-notchedOutline': {
+    borderRadius: '2px',  // 角を小さく
+  },
+  margin: 0,  // マージンを削除
+});
+
+const FixedImageSection = styled('div')({
+  position: 'sticky',
+  top: 0,
+  backgroundColor: '#fff',
+  zIndex: 1,
+  paddingBottom: '16px',
+  borderBottom: '1px solid rgba(0, 0, 0, 0.12)',
+});
+
+const ScrollableContent = styled('div')({
+  overflowY: 'auto',
+  height: 'calc(100% - 300px)', // 画像エリアとヘッダー、フッターの高さを考慮
 });
 
 // 仮のユーザーID（実際の認証システムから取得する）
@@ -269,10 +289,12 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
       fullWidth
       PaperProps={{
         sx: {
-          maxHeight: '90vh',  // ビューポートの90%の高さまで許可
-          height: '90vh',     // 固定の高さを設定
+          maxHeight: '90vh',
+          height: '90vh',
+          display: 'flex',
+          flexDirection: 'column',
           ...(approvalInfo && {
-            backgroundColor: alpha('#4caf50', 0.05),  // 承認済みの場合、背景色を変更
+            backgroundColor: alpha('#4caf50', 0.05),
           })
         }
       }}
@@ -286,6 +308,7 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
           borderBottom: 1,
           borderColor: approvalInfo ? 'success.main' : 'divider',
           bgcolor: approvalInfo ? 'success.lighter' : 'inherit',
+          flex: '0 0 auto', // 固定サイズ
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
@@ -332,10 +355,9 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
         </Box>
       </DialogTitle>
 
-      <DialogContent>
-        <Grid container spacing={3} direction="column">
-          {/* 画像表示エリア */}
-          <Grid item xs={12}>
+      <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <FixedImageSection>
+          <Box p={3}>
             <Typography variant="subtitle1" gutterBottom>
               明細画像
             </Typography>
@@ -368,152 +390,166 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
                 </Typography>
               )}
             </ImageContainer>
-          </Grid>
+          </Box>
+        </FixedImageSection>
 
-          {/* 基本情報 */}
-          <Grid item xs={12}>
-            <Typography variant="subtitle1" gutterBottom>
-              基本情報
-            </Typography>
-            <TableContainer component={Paper} variant="outlined">
-              <Table size="small">
-                <TableBody>
-                  <TableRow>
-                    <TableCell component="th" sx={{ width: '15%' }}>取引先コード</TableCell>
-                    <TableCell>{displayDetail.customer_code}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell component="th">取引先名</TableCell>
-                    <TableCell>{displayDetail.customer_name}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
-                      <EditableCell component="th" className={editMode ? 'editable' : ''}>商品名</EditableCell>
-                    </Tooltip>
-                    <EditableCell className={editMode ? 'editable' : ''}>
-                      {renderEditableCell('description', displayDetail.description)}
-                    </EditableCell>
-                  </TableRow>
-                  <TableRow>
-                    <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
-                      <EditableCell component="th" className={editMode ? 'editable' : ''}>金額</EditableCell>
-                    </Tooltip>
-                    <EditableCell className={editMode ? 'editable' : ''}>
-                      {renderEditableCell('amount', displayDetail.amount, 'number')}
-                    </EditableCell>
-                  </TableRow>
-                  <TableRow>
-                    <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
-                      <EditableCell component="th" className={editMode ? 'editable' : ''}>税率</EditableCell>
-                    </Tooltip>
-                    <EditableCell className={editMode ? 'editable' : ''}>
-                      {renderEditableCell('tax_rate', displayDetail.tax_rate)}
-                    </EditableCell>
-                  </TableRow>
-                  {displayDetail.date_range && (
-                    <TableRow>
-                      <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
-                        <EditableCell component="th" className={editMode ? 'editable' : ''}>期間</EditableCell>
-                      </Tooltip>
-                      <EditableCell className={editMode ? 'editable' : ''}>
-                        {renderEditableCell('date_range', displayDetail.date_range)}
-                      </EditableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-
-            {displayDetail.stock_info && (
-              <Box mt={3}>
-                <Typography variant="subtitle1" gutterBottom>
-                  在庫情報
+        <ScrollableContent>
+          <Box p={3}>
+            <Grid container spacing={1} direction="column">
+              {/* 基本情報 */}
+              <Grid item xs={12}>
+                <Typography variant="subtitle1" gutterBottom sx={{ mb: 1 }}>
+                  基本情報
                 </Typography>
                 <TableContainer component={Paper} variant="outlined">
                   <Table size="small">
                     <TableBody>
                       <TableRow>
+                        <TableCell component="th" sx={{ width: '15%' }}>取引先コード</TableCell>
+                        <TableCell>{displayDetail.customer_code}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell component="th">取引先名</TableCell>
+                        <TableCell>{displayDetail.customer_name}</TableCell>
+                      </TableRow>
+                      <TableRow>
                         <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
-                          <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>繰越</EditableCell>
+                          <EditableCell component="th" className={editMode ? 'editable' : ''}>商品名</EditableCell>
                         </Tooltip>
                         <EditableCell className={editMode ? 'editable' : ''}>
-                          {renderEditableCell('stock_info.carryover', displayDetail.stock_info.carryover, 'number')}
+                          {renderEditableCell('description', displayDetail.description)}
                         </EditableCell>
                       </TableRow>
                       <TableRow>
                         <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
-                          <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>入庫</EditableCell>
+                          <EditableCell component="th" className={editMode ? 'editable' : ''}>金額</EditableCell>
                         </Tooltip>
                         <EditableCell className={editMode ? 'editable' : ''}>
-                          {renderEditableCell('stock_info.incoming', displayDetail.stock_info.incoming, 'number')}
+                          {renderEditableCell('amount', displayDetail.amount, 'number')}
                         </EditableCell>
                       </TableRow>
                       <TableRow>
                         <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
-                          <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>出庫</EditableCell>
+                          <EditableCell component="th" className={editMode ? 'editable' : ''}>税率</EditableCell>
                         </Tooltip>
                         <EditableCell className={editMode ? 'editable' : ''}>
-                          {renderEditableCell('stock_info.outgoing', displayDetail.stock_info.outgoing, 'number')}
+                          {renderEditableCell('tax_rate', displayDetail.tax_rate)}
                         </EditableCell>
                       </TableRow>
-                      <TableRow>
-                        <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
-                          <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>残高</EditableCell>
-                        </Tooltip>
-                        <EditableCell className={editMode ? 'editable' : ''}>
-                          {renderEditableCell('stock_info.remaining', displayDetail.stock_info.remaining, 'number')}
-                        </EditableCell>
-                      </TableRow>
-                      <TableRow>
-                        <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
-                          <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>単価</EditableCell>
-                        </Tooltip>
-                        <EditableCell className={editMode ? 'editable' : ''}>
-                          {renderEditableCell('stock_info.unit_price', displayDetail.stock_info.unit_price, 'number')}
-                        </EditableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Box>
-            )}
-
-            {displayDetail.quantity_info && (
-              <Box mt={3}>
-                <Typography variant="subtitle1" gutterBottom>
-                  数量情報
-                </Typography>
-                <TableContainer component={Paper} variant="outlined">
-                  <Table size="small">
-                    <TableBody>
-                      <TableRow>
-                        <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
-                          <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>数量</EditableCell>
-                        </Tooltip>
-                        <EditableCell className={editMode ? 'editable' : ''}>
-                          {renderEditableCell('quantity_info.quantity', displayDetail.quantity_info.quantity, 'number')}
-                        </EditableCell>
-                      </TableRow>
-                      {displayDetail.quantity_info.unit_price && (
+                      {displayDetail.date_range && (
                         <TableRow>
                           <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
-                            <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>単価</EditableCell>
+                            <EditableCell component="th" className={editMode ? 'editable' : ''}>期間</EditableCell>
                           </Tooltip>
                           <EditableCell className={editMode ? 'editable' : ''}>
-                            {renderEditableCell('quantity_info.unit_price', displayDetail.quantity_info.unit_price, 'number')}
+                            {renderEditableCell('date_range', displayDetail.date_range)}
                           </EditableCell>
                         </TableRow>
                       )}
                     </TableBody>
                   </Table>
                 </TableContainer>
-              </Box>
-            )}
-          </Grid>
-        </Grid>
+              </Grid>
+
+              {displayDetail.stock_info && (
+                <Grid item xs={12}>
+                  <Typography variant="subtitle1" gutterBottom sx={{ mb: 1 }}>
+                    在庫情報
+                  </Typography>
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                      <TableBody>
+                        <TableRow>
+                          <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                            <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>繰越</EditableCell>
+                          </Tooltip>
+                          <EditableCell className={editMode ? 'editable' : ''}>
+                            {renderEditableCell('stock_info.carryover', displayDetail.stock_info.carryover, 'number')}
+                          </EditableCell>
+                        </TableRow>
+                        <TableRow>
+                          <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                            <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>入庫</EditableCell>
+                          </Tooltip>
+                          <EditableCell className={editMode ? 'editable' : ''}>
+                            {renderEditableCell('stock_info.incoming', displayDetail.stock_info.incoming, 'number')}
+                          </EditableCell>
+                        </TableRow>
+                        <TableRow>
+                          <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                            <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>出庫</EditableCell>
+                          </Tooltip>
+                          <EditableCell className={editMode ? 'editable' : ''}>
+                            {renderEditableCell('stock_info.outgoing', displayDetail.stock_info.outgoing, 'number')}
+                          </EditableCell>
+                        </TableRow>
+                        <TableRow>
+                          <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                            <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>残高</EditableCell>
+                          </Tooltip>
+                          <EditableCell className={editMode ? 'editable' : ''}>
+                            {renderEditableCell('stock_info.remaining', displayDetail.stock_info.remaining, 'number')}
+                          </EditableCell>
+                        </TableRow>
+                        <TableRow>
+                          <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                            <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>単価</EditableCell>
+                          </Tooltip>
+                          <EditableCell className={editMode ? 'editable' : ''}>
+                            {renderEditableCell('stock_info.unit_price', displayDetail.stock_info.unit_price, 'number')}
+                          </EditableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Grid>
+              )}
+
+              {displayDetail.quantity_info && (
+                <Grid item xs={12}>
+                  <Typography variant="subtitle1" gutterBottom sx={{ mb: 1 }}>
+                    数量情報
+                  </Typography>
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                      <TableBody>
+                        <TableRow>
+                          <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                            <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>数量</EditableCell>
+                          </Tooltip>
+                          <EditableCell className={editMode ? 'editable' : ''}>
+                            {renderEditableCell('quantity_info.quantity', displayDetail.quantity_info.quantity, 'number')}
+                          </EditableCell>
+                        </TableRow>
+                        {displayDetail.quantity_info.unit_price && (
+                          <TableRow>
+                            <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                              <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>単価</EditableCell>
+                            </Tooltip>
+                            <EditableCell className={editMode ? 'editable' : ''}>
+                              {renderEditableCell('quantity_info.unit_price', displayDetail.quantity_info.unit_price, 'number')}
+                            </EditableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Grid>
+              )}
+            </Grid>
+          </Box>
+        </ScrollableContent>
       </DialogContent>
 
-      <DialogActions sx={{ gap: 1, borderTop: 1, borderColor: 'divider', p: 2 }}>
+      <DialogActions 
+        sx={{ 
+          gap: 1, 
+          borderTop: 1, 
+          borderColor: 'divider', 
+          p: 2,
+          flex: '0 0 auto', // 固定サイズ
+        }}
+      >
         <Box sx={{ display: 'flex', gap: 1, flex: 1 }}>
           {/* 編集モードのボタン */}
           {editMode && (
