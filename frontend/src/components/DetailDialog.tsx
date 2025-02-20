@@ -20,6 +20,7 @@ import {
   Chip,
   Tooltip,
   alpha,
+  TextField,
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
@@ -28,8 +29,10 @@ import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import EditIcon from '@mui/icons-material/Edit';
+import SaveIcon from '@mui/icons-material/Save';
 import { useDocumentStore } from '../store/documentStore';
-import { documentApi } from '../services/api';
+import { documentApi, DetailWithCustomer, StockInfo, QuantityInfo } from '../services/api';
 
 // スタイル付きコンポーネント
 const ImageContainer = styled('div')({
@@ -63,6 +66,27 @@ const StyledImage = styled('img')({
   transformOrigin: 'center center',  // 中心を基準にズーム
 });
 
+const EditableCell = styled(TableCell)(({ theme }) => ({
+  '&:hover': {
+    backgroundColor: alpha(theme.palette.primary.main, 0.04),
+    cursor: 'pointer',
+  },
+  '&.editable': {
+    backgroundColor: alpha(theme.palette.primary.main, 0.08),
+    borderLeft: `2px solid ${theme.palette.primary.main}`,
+  }
+}));
+
+const StyledTextField = styled(TextField)({
+  '& .MuiInputBase-root': {
+    height: '32px',  // 高さを固定
+  },
+  '& .MuiOutlinedInput-input': {
+    padding: '4px 8px',  // パディングを調整
+    fontSize: '0.875rem',  // フォントサイズを調整
+  },
+});
+
 // 仮のユーザーID（実際の認証システムから取得する）
 const CURRENT_USER = "user123";
 
@@ -70,6 +94,12 @@ interface DetailDialogProps {
   open: boolean;
   onClose: () => void;
 }
+
+type NestedKeyOf<T> = {
+  [K in keyof T & (string | number)]: T[K] extends object
+    ? `${K}.${NestedKeyOf<T[K]>}`
+    : K;
+}[keyof T & (string | number)];
 
 export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => {
   const { 
@@ -80,10 +110,14 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
     getNextUnapprovedDetail,
     cancelApproval,
     selectDetail,
+    updateDetail,
+    editedDetails,
+    resetEditedDetail,
   } = useDocumentStore();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [editMode, setEditMode] = useState(false);
 
   // 画像の読み込み
   useEffect(() => {
@@ -125,6 +159,8 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
 
   const isApproved = approvedDetails.has(selectedDetail.no);
   const approvalInfo = isApproved ? approvedDetails.get(selectedDetail.no)! : null;
+  const editedDetail = editedDetails.get(selectedDetail.no);
+  const displayDetail = editedDetail || selectedDetail;
 
   // ズーム操作
   const handleZoomIn = () => {
@@ -197,6 +233,34 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
     }).format(value);
   };
 
+  const handleFieldChange = (path: string, value: string | number) => {
+    const pathParts = path.split('.');
+    const updatedDetail = { ...displayDetail };
+    let current: any = updatedDetail;
+    
+    for (let i = 0; i < pathParts.length - 1; i++) {
+      current = current[pathParts[i]];
+    }
+    current[pathParts[pathParts.length - 1]] = value;
+    
+    updateDetail(selectedDetail.no, updatedDetail);
+  };
+
+  const renderEditableCell = (path: string, value: string | number, type: 'text' | 'number' = 'text') => {
+    if (!editMode) {
+      return type === 'number' ? formatCurrency(value) : value;
+    }
+
+    return (
+      <StyledTextField
+        fullWidth
+        type={type}
+        value={value}
+        onChange={(e) => handleFieldChange(path, e.target.value)}
+      />
+    );
+  };
+
   return (
     <Dialog
       open={open}
@@ -246,6 +310,24 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
               size="small"
               color="default"
             />
+          )}
+          {editedDetails.has(selectedDetail.no) && (
+            <Chip
+              label="編集済み"
+              color="warning"
+              size="small"
+            />
+          )}
+          {!isApproved && (
+            <Button
+              variant="outlined"
+              color={editMode ? "primary" : "inherit"}
+              startIcon={editMode ? <SaveIcon /> : <EditIcon />}
+              onClick={() => setEditMode(!editMode)}
+              sx={{ ml: 2 }}
+            >
+              {editMode ? "編集を完了" : "編集する"}
+            </Button>
           )}
         </Box>
       </DialogTitle>
@@ -298,35 +380,51 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
                 <TableBody>
                   <TableRow>
                     <TableCell component="th" sx={{ width: '15%' }}>取引先コード</TableCell>
-                    <TableCell>{selectedDetail.customer_code}</TableCell>
+                    <TableCell>{displayDetail.customer_code}</TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell component="th">取引先名</TableCell>
-                    <TableCell>{selectedDetail.customer_name}</TableCell>
+                    <TableCell>{displayDetail.customer_name}</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell component="th">商品名</TableCell>
-                    <TableCell>{selectedDetail.description}</TableCell>
+                    <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                      <EditableCell component="th" className={editMode ? 'editable' : ''}>商品名</EditableCell>
+                    </Tooltip>
+                    <EditableCell className={editMode ? 'editable' : ''}>
+                      {renderEditableCell('description', displayDetail.description)}
+                    </EditableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell component="th">金額</TableCell>
-                    <TableCell>{formatCurrency(selectedDetail.amount)}</TableCell>
+                    <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                      <EditableCell component="th" className={editMode ? 'editable' : ''}>金額</EditableCell>
+                    </Tooltip>
+                    <EditableCell className={editMode ? 'editable' : ''}>
+                      {renderEditableCell('amount', displayDetail.amount, 'number')}
+                    </EditableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell component="th">税率</TableCell>
-                    <TableCell>{selectedDetail.tax_rate}</TableCell>
+                    <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                      <EditableCell component="th" className={editMode ? 'editable' : ''}>税率</EditableCell>
+                    </Tooltip>
+                    <EditableCell className={editMode ? 'editable' : ''}>
+                      {renderEditableCell('tax_rate', displayDetail.tax_rate)}
+                    </EditableCell>
                   </TableRow>
-                  {selectedDetail.date_range && (
+                  {displayDetail.date_range && (
                     <TableRow>
-                      <TableCell component="th">期間</TableCell>
-                      <TableCell>{selectedDetail.date_range}</TableCell>
+                      <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                        <EditableCell component="th" className={editMode ? 'editable' : ''}>期間</EditableCell>
+                      </Tooltip>
+                      <EditableCell className={editMode ? 'editable' : ''}>
+                        {renderEditableCell('date_range', displayDetail.date_range)}
+                      </EditableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
             </TableContainer>
 
-            {selectedDetail.stock_info && (
+            {displayDetail.stock_info && (
               <Box mt={3}>
                 <Typography variant="subtitle1" gutterBottom>
                   在庫情報
@@ -335,24 +433,44 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
                   <Table size="small">
                     <TableBody>
                       <TableRow>
-                        <TableCell component="th" sx={{ width: '15%' }}>繰越</TableCell>
-                        <TableCell>{selectedDetail.stock_info.carryover}</TableCell>
+                        <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                          <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>繰越</EditableCell>
+                        </Tooltip>
+                        <EditableCell className={editMode ? 'editable' : ''}>
+                          {renderEditableCell('stock_info.carryover', displayDetail.stock_info.carryover, 'number')}
+                        </EditableCell>
                       </TableRow>
                       <TableRow>
-                        <TableCell component="th" sx={{ width: '15%' }}>入庫</TableCell>
-                        <TableCell>{selectedDetail.stock_info.incoming}</TableCell>
+                        <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                          <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>入庫</EditableCell>
+                        </Tooltip>
+                        <EditableCell className={editMode ? 'editable' : ''}>
+                          {renderEditableCell('stock_info.incoming', displayDetail.stock_info.incoming, 'number')}
+                        </EditableCell>
                       </TableRow>
                       <TableRow>
-                        <TableCell component="th" sx={{ width: '15%' }}>出庫</TableCell>
-                        <TableCell>{selectedDetail.stock_info.outgoing}</TableCell>
+                        <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                          <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>出庫</EditableCell>
+                        </Tooltip>
+                        <EditableCell className={editMode ? 'editable' : ''}>
+                          {renderEditableCell('stock_info.outgoing', displayDetail.stock_info.outgoing, 'number')}
+                        </EditableCell>
                       </TableRow>
                       <TableRow>
-                        <TableCell component="th" sx={{ width: '15%' }}>残高</TableCell>
-                        <TableCell>{selectedDetail.stock_info.remaining}</TableCell>
+                        <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                          <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>残高</EditableCell>
+                        </Tooltip>
+                        <EditableCell className={editMode ? 'editable' : ''}>
+                          {renderEditableCell('stock_info.remaining', displayDetail.stock_info.remaining, 'number')}
+                        </EditableCell>
                       </TableRow>
                       <TableRow>
-                        <TableCell component="th" sx={{ width: '15%' }}>単価</TableCell>
-                        <TableCell>{formatCurrency(selectedDetail.stock_info.unit_price)}</TableCell>
+                        <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                          <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>単価</EditableCell>
+                        </Tooltip>
+                        <EditableCell className={editMode ? 'editable' : ''}>
+                          {renderEditableCell('stock_info.unit_price', displayDetail.stock_info.unit_price, 'number')}
+                        </EditableCell>
                       </TableRow>
                     </TableBody>
                   </Table>
@@ -360,7 +478,7 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
               </Box>
             )}
 
-            {selectedDetail.quantity_info && (
+            {displayDetail.quantity_info && (
               <Box mt={3}>
                 <Typography variant="subtitle1" gutterBottom>
                   数量情報
@@ -369,13 +487,21 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
                   <Table size="small">
                     <TableBody>
                       <TableRow>
-                        <TableCell component="th" sx={{ width: '15%' }}>数量</TableCell>
-                        <TableCell>{selectedDetail.quantity_info.quantity}</TableCell>
+                        <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                          <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>数量</EditableCell>
+                        </Tooltip>
+                        <EditableCell className={editMode ? 'editable' : ''}>
+                          {renderEditableCell('quantity_info.quantity', displayDetail.quantity_info.quantity, 'number')}
+                        </EditableCell>
                       </TableRow>
-                      {selectedDetail.quantity_info.unit_price && (
+                      {displayDetail.quantity_info.unit_price && (
                         <TableRow>
-                          <TableCell component="th" sx={{ width: '15%' }}>単価</TableCell>
-                          <TableCell>{formatCurrency(selectedDetail.quantity_info.unit_price)}</TableCell>
+                          <Tooltip title={editMode ? "クリックして編集" : ""} arrow>
+                            <EditableCell component="th" sx={{ width: '15%' }} className={editMode ? 'editable' : ''}>単価</EditableCell>
+                          </Tooltip>
+                          <EditableCell className={editMode ? 'editable' : ''}>
+                            {renderEditableCell('quantity_info.unit_price', displayDetail.quantity_info.unit_price, 'number')}
+                          </EditableCell>
                         </TableRow>
                       )}
                     </TableBody>
@@ -389,8 +515,22 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
 
       <DialogActions sx={{ gap: 1, borderTop: 1, borderColor: 'divider', p: 2 }}>
         <Box sx={{ display: 'flex', gap: 1, flex: 1 }}>
+          {/* 編集モードのボタン */}
+          {editMode && (
+            <Button
+              variant="outlined"
+              color="inherit"
+              onClick={() => {
+                setEditMode(false);
+                resetEditedDetail(selectedDetail.no);
+              }}
+              startIcon={<CancelIcon />}
+            >
+              キャンセル
+            </Button>
+          )}
           {/* 承認ボタン */}
-          {!isApproved && (
+          {!isApproved && !editMode && (
             <Button
               startIcon={<CheckCircleIcon />}
               onClick={handleApprove}
