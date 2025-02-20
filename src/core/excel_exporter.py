@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Union
 from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
@@ -22,7 +22,9 @@ class ExcelExporter:
         )
         self.center_align = Alignment(horizontal="center")
 
-    def export(self, document: DocumentStructure, output_path: str) -> None:
+    def export(
+        self, document: Union[DocumentStructure, Dict[str, Any]], output_path: str
+    ) -> None:
         """エクセルファイルを出力する"""
         # ヘッダー行の設定
         headers = [
@@ -59,46 +61,53 @@ class ExcelExporter:
 
         # データの書き込み
         row = 2
-        for customer in document.customers:
-            for entry in customer.entries:
-                self.sheet.cell(row=row, column=1).value = document.pdf_filename
-                self.sheet.cell(row=row, column=2).value = document.total_amount
-                self.sheet.cell(row=row, column=3).value = customer.customer_code
-                self.sheet.cell(row=row, column=4).value = customer.customer_name
-                self.sheet.cell(row=row, column=5).value = customer.department
-                self.sheet.cell(row=row, column=6).value = customer.box_number
-                self.sheet.cell(row=row, column=7).value = entry.no
-                self.sheet.cell(row=row, column=8).value = entry.description
-                self.sheet.cell(row=row, column=9).value = entry.tax_rate
-                self.sheet.cell(row=row, column=10).value = entry.amount
-                self.sheet.cell(row=row, column=11).value = entry.date_range
-                self.sheet.cell(row=row, column=12).value = entry.page_no
+        # documentがdict型の場合は直接アクセス、そうでない場合は属性アクセス
+        doc_data = document if isinstance(document, dict) else document.model_dump()
 
-                if entry.stock_info:
-                    self.sheet.cell(row=row, column=13).value = (
-                        entry.stock_info.carryover
+        for customer in doc_data["customers"]:
+            for entry in customer["entries"]:
+                self.sheet.cell(row=row, column=1).value = doc_data["pdf_filename"]
+                self.sheet.cell(row=row, column=2).value = doc_data["total_amount"]
+                self.sheet.cell(row=row, column=3).value = customer["customer_code"]
+                self.sheet.cell(row=row, column=4).value = customer["customer_name"]
+                self.sheet.cell(row=row, column=5).value = customer["department"]
+                self.sheet.cell(row=row, column=6).value = customer["box_number"]
+                self.sheet.cell(row=row, column=7).value = entry["no"]
+                self.sheet.cell(row=row, column=8).value = entry["description"]
+                self.sheet.cell(row=row, column=9).value = entry["tax_rate"]
+                self.sheet.cell(row=row, column=10).value = entry["amount"]
+                self.sheet.cell(row=row, column=11).value = entry.get("date_range")
+                self.sheet.cell(row=row, column=12).value = entry["page_no"]
+
+                if "stock_info" in entry and entry["stock_info"]:
+                    stock_info = entry["stock_info"]
+                    self.sheet.cell(row=row, column=13).value = stock_info.get(
+                        "carryover"
                     )
-                    self.sheet.cell(row=row, column=14).value = (
-                        entry.stock_info.incoming
+                    self.sheet.cell(row=row, column=14).value = stock_info.get(
+                        "incoming"
                     )
-                    self.sheet.cell(row=row, column=15).value = entry.stock_info.w_value
-                    self.sheet.cell(row=row, column=16).value = (
-                        entry.stock_info.outgoing
+                    self.sheet.cell(row=row, column=15).value = stock_info.get(
+                        "w_value"
                     )
-                    self.sheet.cell(row=row, column=17).value = (
-                        entry.stock_info.remaining
+                    self.sheet.cell(row=row, column=16).value = stock_info.get(
+                        "outgoing"
                     )
-                    self.sheet.cell(row=row, column=18).value = entry.stock_info.total
-                    self.sheet.cell(row=row, column=19).value = (
-                        entry.stock_info.unit_price
+                    self.sheet.cell(row=row, column=17).value = stock_info.get(
+                        "remaining"
+                    )
+                    self.sheet.cell(row=row, column=18).value = stock_info.get("total")
+                    self.sheet.cell(row=row, column=19).value = stock_info.get(
+                        "unit_price"
                     )
 
-                if entry.quantity_info:
-                    self.sheet.cell(row=row, column=20).value = (
-                        entry.quantity_info.quantity
+                if "quantity_info" in entry and entry["quantity_info"]:
+                    quantity_info = entry["quantity_info"]
+                    self.sheet.cell(row=row, column=20).value = quantity_info.get(
+                        "quantity"
                     )
-                    self.sheet.cell(row=row, column=21).value = (
-                        entry.quantity_info.unit_price
+                    self.sheet.cell(row=row, column=21).value = quantity_info.get(
+                        "unit_price"
                     )
 
                 row += 1
