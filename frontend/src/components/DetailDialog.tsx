@@ -75,7 +75,7 @@ const EditableCell = styled(TableCell)(({ theme }) => ({
     backgroundColor: alpha(theme.palette.primary.main, 0.08),
     borderLeft: `2px solid ${theme.palette.primary.main}`,
   },
-  padding: '8px',  // セルのパディングを調整
+  padding: '4px',  // セルのパディングを調整
 }));
 
 const StyledTextField = styled(TextField)({
@@ -104,8 +104,14 @@ const FixedImageSection = styled('div')({
 
 const ScrollableContent = styled('div')({
   overflowY: 'auto',
-  height: 'calc(100% - 300px)', // 画像エリアとヘッダー、フッターの高さを考慮
+  flex: 1,  // 利用可能な空間全体を使用
+  minHeight: 0, // これが重要：flexboxでスクロールを正しく機能させるため
+  '& > div': {  // Box要素のスタイル
+    minHeight: '100%',  // 最小の高さを100%に設定
+    paddingBottom: '400px',  // 下部に余白を大きく追加してスクロールを可能にする
+  }
 });
+
 
 // 仮のユーザーID（実際の認証システムから取得する）
 const CURRENT_USER = "user123";
@@ -355,7 +361,7 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
         </Box>
       </DialogTitle>
 
-      <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%', flex: 1 }}>
         <FixedImageSection>
           <Box p={3}>
             <Typography variant="subtitle1" gutterBottom>
@@ -394,11 +400,11 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
         </FixedImageSection>
 
         <ScrollableContent>
-          <Box p={3}>
-            <Grid container spacing={1} direction="column">
+          <Box p={1}>
+            <Grid container spacing={0} direction="column">
               {/* 基本情報 */}
-              <Grid item xs={12}>
-                <Typography variant="subtitle1" gutterBottom sx={{ mb: 1 }}>
+              <Grid item xs={12} sx={{ mt: 0.5 }}>
+                <Typography variant="subtitle1" gutterBottom sx={{ mb: 0.5 }}>
                   基本情報
                 </Typography>
                 <TableContainer component={Paper} variant="outlined">
@@ -452,8 +458,8 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
               </Grid>
 
               {displayDetail.stock_info && (
-                <Grid item xs={12}>
-                  <Typography variant="subtitle1" gutterBottom sx={{ mb: 1 }}>
+                <Grid item xs={12} sx={{ mt: 0.5 }}>
+                  <Typography variant="subtitle1" gutterBottom sx={{ mb: 0.5 }}>
                     在庫情報
                   </Typography>
                   <TableContainer component={Paper} variant="outlined">
@@ -506,8 +512,8 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
               )}
 
               {displayDetail.quantity_info && (
-                <Grid item xs={12}>
-                  <Typography variant="subtitle1" gutterBottom sx={{ mb: 1 }}>
+                <Grid item xs={12} sx={{ mt: 0.5 }}>
+                  <Typography variant="subtitle1" gutterBottom sx={{ mb: 0.5 }}>
                     数量情報
                   </Typography>
                   <TableContainer component={Paper} variant="outlined">
