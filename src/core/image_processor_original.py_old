@@ -10,6 +10,7 @@ from pdfminer.layout import LTTextContainer, LTPage
 @dataclass
 class DetailLine:
     """明細行の情報を保持するクラス"""
+
     page_num: int
     no: str
     y_top: float
@@ -31,11 +32,6 @@ class ImageProcessor:
         detail_lines = []
         current_page = 0
 
-        # PDFのページ高さを取得
-        doc = fitz.open(pdf_path)
-        pdf_height = doc[0].rect.height
-        doc.close()
-
         for page_layout in extract_pages(pdf_path):
             if not isinstance(page_layout, LTPage):
                 continue
@@ -51,7 +47,9 @@ class ImageProcessor:
                     print(f"テキスト検出: {text}")
                     detail_no = self._is_detail_number(text)
                     if detail_no:
-                        print(f"明細番号を検出: No.{detail_no}, 位置: y1={element.y1}, y0={element.y0}")
+                        print(
+                            f"明細番号を検出: No.{detail_no}, 位置: y1={element.y1}, y0={element.y0}"
+                        )
                         number_positions.append((detail_no, element.y1, element.y0))
 
             # 明細番号の位置でソート（上から下）
@@ -70,7 +68,7 @@ class ImageProcessor:
                 # 下端の決定
                 if i < len(number_positions) - 1:
                     # 次の明細番号がある場合は、その位置まで
-                    y_bottom = number_positions[i + 1][1] - 2
+                    y_bottom = number_positions[i + 1][1] - 2  # 2ポイントの余白を追加
                 else:
                     # ページ最後の明細の場合は、ページ下部まで
                     y_bottom = page_bottom
@@ -82,7 +80,7 @@ class ImageProcessor:
                         y_top=y_top,
                         y_bottom=y_bottom,
                         x_left=40,
-                        x_right=page_layout.width - 30,
+                        x_right=page_layout.width - 30,  # 右端の余白を30ポイントに修正
                     )
                 )
 
@@ -90,7 +88,9 @@ class ImageProcessor:
 
         return detail_lines
 
-    def extract_detail_image(self, pdf_path: str, detail_no: str, output_path: str) -> None:
+    def extract_detail_image(
+        self, pdf_path: str, detail_no: str, output_path: str
+    ) -> None:
         """明細行の画像を抽出する"""
         try:
             # 明細行の位置情報を取得
@@ -105,17 +105,17 @@ class ImageProcessor:
             print(f"Target detail: {target_detail}")
 
             # PDFを開く
+            print("Opening PDF...")
             doc = fitz.open(pdf_path)
             page = doc[target_detail.page_num]
-            pdf_height = page.rect.height
             print(f"PDF page size: {page.rect}")
 
-            # PDFMinerの座標系（左下原点）からPyMuPDFの座標系（左上原点）に変換
+            # 切り取り範囲を設定（y_topとy_bottomを入れ替えて正しい順序にする）
             clip_rect = fitz.Rect(
-                target_detail.x_left,                    # x1: 左端
-                pdf_height - target_detail.y_top,        # y1: 上端（変換後）
-                target_detail.x_right,                   # x2: 右端
-                pdf_height - target_detail.y_bottom      # y2: 下端（変換後）
+                target_detail.x_left,
+                target_detail.y_bottom,  # 下端を先に指定
+                target_detail.x_right,
+                target_detail.y_top,  # 上端を後に指定
             )
             print(f"Clip rectangle: {clip_rect}")
 
@@ -128,7 +128,7 @@ class ImageProcessor:
             # 画像を保存
             print(f"Saving image to: {output_path}")
             pix.save(output_path)
-            print("Image saved successfully")
+            print(f"Image saved successfully")
 
             doc.close()
             print("PDF closed")
@@ -138,10 +138,7 @@ class ImageProcessor:
 
     def _is_detail_number(self, text: str) -> Optional[str]:
         """明細番号かどうかを判定する"""
-        patterns = [
-            r"^No.\s*(\d+)\s*$",  # No.10 or No10
-            r"^\s*(\d+)\s*$"      # 10
-        ]
+        patterns = [r"^No.\s*(\d+)\s*$", r"^\s*(\d+)\s*$"]  # No.10 or No10  # 10
 
         for pattern in patterns:
             match = re.match(pattern, text, re.IGNORECASE)

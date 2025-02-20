@@ -41,6 +41,9 @@ export interface EntryDetail {
   quantity_info?: QuantityInfo;
   date_range?: string;
   page_no: number;
+  isApproved?: boolean;
+  approvedAt?: string;
+  approvedBy?: string;
 }
 
 export interface StockInfo {
@@ -100,6 +103,69 @@ export const documentApi = {
     const response = await api.get<Blob>(`/documents/excel/${taskId}`, {
       responseType: 'blob',
     });
+    return response.data;
+  },
+
+  // 明細を承認
+  approveDetail: async (taskId: string, detailNo: string, userId: string) => {
+    const response = await api.post<{
+      success: boolean;
+      detail_no: string;
+      approved: boolean;
+      approved_at: string;
+      approved_by: string;
+      message: string;
+    }>(`/approvals/${taskId}/${detailNo}`, null, {
+      params: { user_id: userId },
+    });
+    return response.data;
+  },
+
+  // 承認を取り消し
+  cancelApproval: async (taskId: string, detailNo: string, userId: string) => {
+    const response = await api.delete<{
+      success: boolean;
+      detail_no: string;
+      approved: boolean;
+      approved_at: string | null;
+      approved_by: string | null;
+      message: string;
+    }>(`/approvals/${taskId}/${detailNo}`, {
+      params: { user_id: userId },
+    });
+    return response.data;
+  },
+
+  // 承認状態を取得
+  getApprovalStatus: async (taskId: string) => {
+    const response = await api.get<{
+      task_id: string;
+      approved_details: Array<{
+        detail_no: string;
+        approved: boolean;
+        approved_at: string;
+        approved_by: string;
+        task_id: string;
+      }>;
+      total_details: number;
+      approved_count: number;
+    }>(`/approvals/${taskId}`);
+    return response.data;
+  },
+
+  // 承認履歴を取得
+  getApprovalHistory: async (taskId: string, detailNo?: string) => {
+    const url = detailNo 
+      ? `/approvals/${taskId}/history?detail_no=${detailNo}`
+      : `/approvals/${taskId}/history`;
+    const response = await api.get<Array<{
+      detail_no: string;
+      action: "approve" | "cancel";
+      timestamp: string;
+      user_id: string;
+      task_id: string;
+      reason?: string;
+    }>>(url);
     return response.data;
   },
 };

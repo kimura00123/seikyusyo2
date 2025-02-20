@@ -89,12 +89,17 @@ async def health_check():
 
 
 # ルーターの登録
-from .routers import document_router
+from .routers import document_router, approval
 
 app.include_router(
     document_router,
     prefix="/documents",  # プレフィックスを/documentsに変更
     tags=["documents"],
+)
+
+app.include_router(
+    approval.router,
+    tags=["approvals"],
 )
 
 

@@ -35,7 +35,7 @@ async def upload_document(file: UploadFile = File(...)) -> Dict[str, str]:
         parser = PDFParser(pdf_path)
         text_elements = parser.extract_text_with_positions()
 
-        structurer = StructuringEngine()
+        structurer = StructuringEngine(pdf_path)
         document = structurer.structure_invoice(text_elements)
 
         # 結果を一時保存（辞書形式に変換）
