@@ -1,29 +1,8 @@
 import { create } from 'zustand';
-import { DocumentStructure, ValidationResult, documentApi } from '../services/api';
+import { DocumentStructure, ValidationResult, documentApi, DetailWithCustomer } from '../services/api';
 
-interface DetailWithCustomer {
-  no: string;
-  description: string;
-  tax_rate: string;
-  amount: string;
-  stock_info?: {
-    carryover: number;
-    incoming: number;
-    w_value: number;
-    outgoing: number;
-    remaining: number;
-    total: number;
-    unit_price: number;
-  };
-  quantity_info?: {
-    quantity: number;
-    unit_price?: number;
-  };
-  date_range?: string;
-  page_no: number;
-  customer_code: string;
-  customer_name: string;
-}
+// DetailWithCustomerの型を再エクスポート
+export type { DetailWithCustomer };
 
 interface DocumentState {
   // 状態
@@ -34,6 +13,7 @@ interface DocumentState {
   error: string | null;
   selectedDetail: DetailWithCustomer | null;
   approvedDetails: Map<string, { approved_at: string; approved_by: string }>;
+  editedDetails: Map<string, DetailWithCustomer>;  // 編集中の値を保持
 
   // アクション
   uploadDocument: (file: File) => Promise<void>;
@@ -42,6 +22,8 @@ interface DocumentState {
   reset: () => void;
   selectDetail: (detail: DetailWithCustomer) => void;
   clearSelectedDetail: () => void;
+  updateDetail: (detailNo: string, updatedDetail: Partial<DetailWithCustomer>) => void;
+  resetEditedDetail: (detailNo: string) => void;
   approveDetail: (detailNo: string, userId: string) => Promise<void>;
   approveMultipleDetails: (detailNos: string[], userId: string) => Promise<void>;
   approveAllDetails: (userId: string) => Promise<void>;
@@ -60,6 +42,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   error: null,
   selectedDetail: null,
   approvedDetails: new Map(),
+  editedDetails: new Map(),
 
   // アクション
   uploadDocument: async (file: File) => {
@@ -131,22 +114,57 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       error: null,
       selectedDetail: null,
       approvedDetails: new Map(),
+      editedDetails: new Map(),
+    });
+  },
+
+  updateDetail: (detailNo: string, updatedDetail: Partial<DetailWithCustomer>) => {
+    set(state => {
+      const newEditedDetails = new Map(state.editedDetails);
+      const currentDetail = state.editedDetails.get(detailNo) || state.document?.customers
+        .flatMap(c => ({
+          ...c.entries.find(e => e.no === detailNo),
+          customer_code: c.customer_code,
+          customer_name: c.customer_name,
+        }))
+        .find(Boolean) as DetailWithCustomer | undefined;
+        
+      if (currentDetail) {
+        newEditedDetails.set(detailNo, { ...currentDetail, ...updatedDetail });
+      }
+      return { editedDetails: newEditedDetails };
+    });
+  },
+
+  resetEditedDetail: (detailNo: string) => {
+    set(state => {
+      const newEditedDetails = new Map(state.editedDetails);
+      newEditedDetails.delete(detailNo);
+      return { editedDetails: newEditedDetails };
     });
   },
 
   approveDetail: async (detailNo: string, userId: string) => {
-    const { taskId } = get();
+    const { taskId, editedDetails } = get();
     if (!taskId) return;
 
     try {
-      const result = await documentApi.approveDetail(taskId, detailNo, userId);
+      // 編集された値がある場合は、それを含めて承認
+      const editedDetail = editedDetails.get(detailNo);
+      const result = await documentApi.approveDetail(taskId, detailNo, userId, editedDetail);
       if (result.success) {
-        set(state => ({
-          approvedDetails: new Map(state.approvedDetails).set(detailNo, {
+        set(state => {
+          const newApprovedDetails = new Map(state.approvedDetails).set(detailNo, {
             approved_at: result.approved_at,
             approved_by: result.approved_by,
-          }),
-        }));
+          });
+          const newEditedDetails = new Map(state.editedDetails);
+          newEditedDetails.delete(detailNo); // 承認後は編集値をクリア
+          return { 
+            approvedDetails: newApprovedDetails,
+            editedDetails: newEditedDetails,
+          };
+        });
       }
     } catch (error) {
       set({ 
@@ -300,5 +318,3 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     set({ selectedDetail: null });
   },
 }));
-
-export type { DetailWithCustomer };

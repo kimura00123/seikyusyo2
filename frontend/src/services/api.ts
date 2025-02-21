@@ -61,6 +61,11 @@ export interface QuantityInfo {
   unit_price?: number;
 }
 
+export interface DetailWithCustomer extends EntryDetail {
+  customer_code: string;
+  customer_name: string;
+}
+
 export const documentApi = {
   // PDFファイルをアップロード
   uploadPdf: async (file: File) => {
@@ -99,15 +104,17 @@ export const documentApi = {
   },
 
   // エクセルファイルをダウンロード
-  downloadExcel: async (taskId: string) => {
-    const response = await api.get<Blob>(`/documents/excel/${taskId}`, {
-      responseType: 'blob',
-    });
+  downloadExcel: async (taskId: string, editedDetails?: Map<string, DetailWithCustomer>) => {
+    const response = await api.post<Blob>(
+      `/documents/excel/${taskId}`,
+      editedDetails ? { edited_details: Object.fromEntries(editedDetails) } : null,
+      { responseType: 'blob' }
+    );
     return response.data;
   },
 
   // 明細を承認
-  approveDetail: async (taskId: string, detailNo: string, userId: string) => {
+  approveDetail: async (taskId: string, detailNo: string, userId: string, editedDetail?: DetailWithCustomer) => {
     const response = await api.post<{
       success: boolean;
       detail_no: string;
@@ -115,7 +122,7 @@ export const documentApi = {
       approved_at: string;
       approved_by: string;
       message: string;
-    }>(`/approvals/${taskId}/${detailNo}`, null, {
+    }>(`/approvals/${taskId}/${detailNo}`, editedDetail, {
       params: { user_id: userId },
     });
     return response.data;

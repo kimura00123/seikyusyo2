@@ -1,6 +1,6 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import os
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Body
 from fastapi.responses import FileResponse
 from src.utils.logger import get_logger
 from src.core.pdf_parser import PDFParser
@@ -98,17 +98,41 @@ async def get_detail_image(task_id: str, detail_no: str) -> FileResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/excel/{task_id}")
-async def download_excel(task_id: str) -> FileResponse:
+@router.post("/excel/{task_id}")
+async def download_excel(
+    task_id: str, edited_details: Optional[Dict[str, Any]] = Body(None)
+) -> FileResponse:
     """エクセルファイルをダウンロードする"""
     try:
+        logger.info(f"エクセル出力開始: task_id={task_id}")
+        if edited_details:
+            logger.info(f"編集された値: {edited_details}")
+
         document = temp_manager.get_result(task_id)
         if not document:
+            logger.error(f"Document not found: task_id={task_id}")
             raise HTTPException(status_code=404, detail="Document not found")
 
+        # 編集された値がある場合は、それを反映
+        if edited_details:
+            logger.info("編集された値を反映開始")
+            for detail_no, edited_detail in edited_details.items():
+                # 該当する明細を探して更新
+                for customer in document["customers"]:
+                    for entry in customer["entries"]:
+                        if entry["no"] == detail_no:
+                            logger.info(f"明細を更新: no={detail_no}")
+                            logger.info(f"更新前: {entry}")
+                            entry.update(edited_detail)
+                            logger.info(f"更新後: {entry}")
+                            break
+
+        logger.info("エクセル出力処理開始")
         exporter = ExcelExporter()
         excel_path = temp_manager.get_excel_path(task_id)
+        logger.info(f"出力先パス: {excel_path}")
         exporter.export(document, excel_path)
+        logger.info("エクセル出力完了")
 
         return FileResponse(
             excel_path,
@@ -117,4 +141,5 @@ async def download_excel(task_id: str) -> FileResponse:
         )
 
     except Exception as e:
+        logger.error(f"エクセル出力でエラー: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
