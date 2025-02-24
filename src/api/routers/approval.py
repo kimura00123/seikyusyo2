@@ -5,14 +5,14 @@ import logging
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 
-from models.approval import (
+from ...utils.cosmos import CosmosDBClient
+from ...utils.logger import get_logger
+from ...models.approval import (
     ApprovalStatus,
     ApprovalHistory,
     ApprovalResponse,
     ApprovalStatusResponse,
 )
-from utils.cosmos import CosmosDBClient
-from utils.logger import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter()
