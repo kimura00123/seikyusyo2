@@ -76,9 +76,12 @@ pycparser==2.22
 pydantic==2.10.6
     # via fastapi
     # via openai
+    # via pydantic-settings
     # via takatuski
 pydantic-core==2.27.2
     # via pydantic
+pydantic-settings==2.8.0
+    # via takatuski
 pymupdf==1.25.3
     # via pymupdf4llm
     # via takatuski
@@ -87,6 +90,7 @@ pymupdf4llm==0.0.17
 pytesseract==0.3.13
     # via takatuski
 python-dotenv==1.0.1
+    # via pydantic-settings
     # via takatuski
 python-multipart==0.0.20
     # via takatuski
