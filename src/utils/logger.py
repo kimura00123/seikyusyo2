@@ -1,125 +1,138 @@
 import logging
-import sys
+import logging.handlers
 import os
-from logging.handlers import TimedRotatingFileHandler
+import sys
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
-# ログフォーマットの設定
-LOG_FORMAT = (
-    "%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s"
-)
-DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+from .config import get_settings
 
-# ログファイルの設定
-LOG_DIR = Path(__file__).parent.parent.parent / "logs"
-LOG_FILE = LOG_DIR / "invoice_system.log"
-BACKUP_COUNT = 7  # 7日分のログを保持
+class CustomFormatter(logging.Formatter):
+    """カスタムログフォーマッター（文字化け対策）"""
+    
+    def __init__(self, fmt: Optional[str] = None):
+        super().__init__(fmt or self.default_format())
+        self.encoding = 'utf-8'
 
-# ログレベルの設定
-LOG_LEVELS = {
-    "DEBUG": logging.DEBUG,  # 開発時の詳細情報
-    "INFO": logging.INFO,  # 通常の操作ログ
-    "WARNING": logging.WARNING,  # 警告（軽度の問題）
-    "ERROR": logging.ERROR,  # エラー（重大な問題）
-    "CRITICAL": logging.CRITICAL,  # 致命的なエラー
-}
+    @staticmethod
+    def default_format() -> str:
+        return (
+            "%(asctime)s [%(levelname)s] "
+            "%(name)s:%(funcName)s:%(lineno)d - %(message)s"
+        )
 
-# 環境変数からログレベルを取得（デフォルトはINFO）
-DEFAULT_LOG_LEVEL = LOG_LEVELS.get(os.getenv("LOG_LEVEL", "INFO"), logging.INFO)
+    def formatException(self, ei) -> str:
+        """例外情報のフォーマット（文字化け対策）"""
+        result = super().formatException(ei)
+        return repr(result)
 
+class SensitiveFilter(logging.Filter):
+    """機密情報除外フィルター"""
+    
+    def __init__(self):
+        super().__init__()
+        # 除外すべき機密情報のパターン
+        self.patterns = [
+            'api_key',
+            'password',
+            'secret',
+            'token',
+            'auth',
+            'credit_card',
+        ]
 
-class CustomLogger:
-    """カスタムロガークラス"""
+    def filter(self, record: logging.LogRecord) -> bool:
+        """機密情報を'[FILTERED]'に置換"""
+        if isinstance(record.msg, str):
+            msg = record.msg
+            for pattern in self.patterns:
+                if pattern in msg.lower():
+                    # 機密情報を含む部分を[FILTERED]に置換
+                    record.msg = '[FILTERED]'
+                    break
+        return True
 
-    _instance: Optional[logging.Logger] = None
+class LogManager:
+    """ログ管理クラス"""
+    
+    def __init__(self):
+        self.settings = get_settings()
+        self._setup_log_directory()
+        self.logger = self._setup_logger()
 
-    @classmethod
-    def setup_logger(cls, name: str) -> logging.Logger:
-        """
-        ロガーを設定する
+    def _setup_log_directory(self) -> None:
+        """ログディレクトリの設定"""
+        log_dir = Path(self.settings.LOG_DIR)
+        log_dir.mkdir(parents=True, exist_ok=True)
 
-        Args:
-            name (str): ロガー名
+    def _setup_logger(self) -> logging.Logger:
+        """ロガーの設定"""
+        logger = logging.getLogger('invoice_processor')
+        logger.setLevel(self.settings.LOG_LEVEL)
 
-        Returns:
-            logging.Logger: 設定済みのロガー
+        # 既存のハンドラをクリア
+        logger.handlers.clear()
 
-        Raises:
-            OSError: ログファイルの作成に失敗した場合
-            PermissionError: ログファイルへの書き込み権限がない場合
-        """
-        if cls._instance is not None:
-            return cls._instance
+        # ファイルハンドラの設定（ローテーション付き）
+        file_handler = self._setup_file_handler()
+        logger.addHandler(file_handler)
 
-        # ロガーの作成
-        logger = logging.getLogger(name)
-        logger.setLevel(DEFAULT_LOG_LEVEL)
+        # コンソールハンドラの設定
+        console_handler = self._setup_console_handler()
+        logger.addHandler(console_handler)
 
-        try:
-            # ログディレクトリの作成
-            LOG_DIR.mkdir(parents=True, exist_ok=True)
+        # 機密情報除外フィルターの追加
+        sensitive_filter = SensitiveFilter()
+        logger.addFilter(sensitive_filter)
 
-            # ファイルハンドラーの設定（日次ローテーション）
-            file_handler = TimedRotatingFileHandler(
-                LOG_FILE,
-                when="midnight",  # 日次でローテーション
-                interval=1,  # 1日ごと
-                backupCount=BACKUP_COUNT,
-                encoding="utf-8-sig",  # Windows対応のためBOM付きUTF-8を使用
-            )
-            file_formatter = logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT)
-            file_handler.setFormatter(file_formatter)
-            logger.addHandler(file_handler)
-
-            # コンソールハンドラーの設定
-            console_handler = logging.StreamHandler(sys.stdout)
-            console_formatter = logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT)
-            console_handler.setFormatter(console_formatter)
-            logger.addHandler(console_handler)
-
-            # エラーハンドラーの設定（エラーレベル以上を別ファイルに記録）
-            error_handler = TimedRotatingFileHandler(
-                LOG_DIR / "error.log",
-                when="midnight",
-                interval=1,
-                backupCount=BACKUP_COUNT,
-                encoding="utf-8-sig",
-            )
-            error_handler.setLevel(logging.ERROR)
-            error_handler.setFormatter(file_formatter)
-            logger.addHandler(error_handler)
-
-        except PermissionError as e:
-            print(f"ログファイルへのアクセス権限がありません: {e}", file=sys.stderr)
-            raise
-        except OSError as e:
-            print(f"ログファイルの作成に失敗しました: {e}", file=sys.stderr)
-            raise
-        except Exception as e:
-            print(f"ログ設定で予期せぬエラーが発生しました: {e}", file=sys.stderr)
-            raise
-
-        cls._instance = logger
         return logger
 
+    def _setup_file_handler(self) -> logging.Handler:
+        """ファイルハンドラの設定"""
+        log_file = Path(self.settings.LOG_DIR) / 'invoice_processor.log'
+        
+        # ローテーティングファイルハンドラの設定
+        handler = logging.handlers.TimedRotatingFileHandler(
+            filename=log_file,
+            when='midnight',  # 毎日0時にローテーション
+            interval=1,       # 1日ごと
+            backupCount=7,    # 7日分保持
+            encoding='utf-8', # 文字化け対策
+            delay=True
+        )
+        
+        formatter = CustomFormatter()
+        handler.setFormatter(formatter)
+        handler.setLevel(self.settings.LOG_LEVEL)
+        
+        return handler
 
-def get_logger(name: str) -> logging.Logger:
-    """
-    ロガーを取得する
+    def _setup_console_handler(self) -> logging.Handler:
+        """コンソールハンドラの設定"""
+        handler = logging.StreamHandler(sys.stdout)
+        formatter = CustomFormatter()
+        handler.setFormatter(formatter)
+        handler.setLevel(self.settings.LOG_LEVEL)
+        return handler
 
-    Args:
-        name (str): ロガー名
+    def get_logger(self) -> logging.Logger:
+        """ロガーの取得"""
+        return self.logger
 
-    Returns:
-        logging.Logger: ロガーインスタンス
-    """
-    return CustomLogger.setup_logger(name)
+# シングルトンインスタンス
+_log_manager: Optional[LogManager] = None
 
+def get_logger() -> logging.Logger:
+    """ロガーのグローバルアクセサ"""
+    global _log_manager
+    if _log_manager is None:
+        _log_manager = LogManager()
+    return _log_manager.get_logger()
 
 # 使用例:
 """
-logger = get_logger(__name__)
+logger = get_logger()
 
 try:
     # 処理開始

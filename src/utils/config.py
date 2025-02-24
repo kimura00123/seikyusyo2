@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 from dotenv import load_dotenv
+from pydantic import BaseSettings
 
 # .envファイルの読み込み
 load_dotenv()
@@ -16,7 +17,7 @@ class Environment(str, Enum):
     PRODUCTION = "production"
 
 
-class Settings(BaseModel):
+class Settings(BaseSettings):
     """環境設定クラス"""
 
     # 基本設定
@@ -61,6 +62,10 @@ class Settings(BaseModel):
         )
     )
 
+    # ログ関連の設定
+    LOG_DIR: str = "logs"
+    LOG_FORMAT: Optional[str] = None
+
     def is_development(self) -> bool:
         """開発環境かどうかを判定する"""
         return self.ENV == Environment.DEVELOPMENT
@@ -99,6 +104,14 @@ class Settings(BaseModel):
 
         return True
 
+    class Config:
+        env_file = ".env"
+        env_file_encoding = 'utf-8'
 
-# グローバル設定インスタンス
-settings = Settings()
+_settings: Optional[Settings] = None
+
+def get_settings() -> Settings:
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
