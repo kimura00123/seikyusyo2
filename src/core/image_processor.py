@@ -53,7 +53,7 @@ class ImageProcessor:
             raise
 
     def extract_detail_regions(self, pdf_path: str) -> List[DetailLine]:
-        """PDFから明細行の位置情報を抽出する - シンプルなアプローチ"""
+        """PDFから明細行の位置情報を抽出する - 顧客情報と明細詳細を適切に処理"""
         logger.debug(f"明細行の位置情報抽出開始: {pdf_path}")
         detail_lines = []
         current_page = 0
@@ -71,6 +71,10 @@ class ImageProcessor:
             
             # 明細番号とその位置を収集
             number_positions = []
+            # 顧客情報とその位置を収集
+            customer_info_positions = []
+            # すべてのテキスト要素の位置を収集
+            all_text_elements = []
             
             for element in page_layout:
                 if isinstance(element, LTTextContainer):
@@ -78,37 +82,105 @@ class ImageProcessor:
                     if not text:
                         continue
                     
+                    # すべてのテキスト要素を記録
+                    all_text_elements.append((text, element.y1, element.y0))
+                    
                     # 明細番号の検出
                     detail_no = is_detail_number(text)
                     if detail_no:
                         logger.debug(f"明細番号を検出: No.{detail_no}, 位置: y1={element.y1}, y0={element.y0}")
                         # 明細番号とその上下の位置を記録
                         number_positions.append((detail_no, element.y1, element.y0))
+                    
+                    # 顧客情報の検出
+                    if re.match(r'^F\d+\s', text) and '_' not in text.split()[0]:
+                        logger.debug(f"顧客情報を検出: {text}, 位置: y1={element.y1}, y0={element.y0}")
+                        # 顧客コードと位置情報を記録
+                        customer_info_positions.append((text, element.y1, element.y0))
             
             # 明細番号の位置でソート（上から下）
             number_positions.sort(key=lambda x: -x[1])
+            # 顧客情報の位置でソート
+            customer_info_positions.sort(key=lambda x: -x[1])
+            # テキスト要素を位置でソート
+            all_text_elements.sort(key=lambda x: -x[1])
             
             # ページの余白
             page_top = page_layout.height
-            page_bottom = 0
+            page_bottom = 35
             
-            # 各明細行の範囲を決定 - シンプルなアプローチ
+            # 各明細行の範囲を決定
             for i, (detail_no, y1, y0) in enumerate(number_positions):
-                # 上端は現在の明細番号より少し上（余裕を持たせる）
-                y_top = y1 + 15  # 15ポイント上
+                # 顧客情報を探す範囲を決定
+                search_top = page_top if i == 0 else number_positions[i-1][1]  # 前の明細番号の位置
+                search_bottom = y1
                 
-                # 下端の決定
-                if i < len(number_positions) - 1:
-                    # 次の明細番号がある場合は、その位置より少し下まで
-                    next_y1 = number_positions[i + 1][1]
-                    y_bottom = next_y1 - 15  # 15ポイント下
+                # この明細に関連する可能性のある顧客情報を検索
+                relevant_customer_info = []
+                for customer_text, customer_y1, customer_y0 in customer_info_positions:
+                    # 明細番号の上にある顧客情報を探す
+                    if customer_y1 < search_top and customer_y1 > search_bottom:
+                        relevant_customer_info.append((customer_text, customer_y1, customer_y0))
+                
+                # デフォルトの上端：明細番号のすぐ上
+                default_y_top = y1 + 1  # 1ポイントの最小マージン
+                
+                # 関連する顧客情報があれば、それを含むように上端を調整
+                if relevant_customer_info:
+                    # 一番上にある顧客情報の上端を使用
+                    y_top = relevant_customer_info[0][1] + 1  # 1ポイントの最小マージン
                 else:
-                    # ページ最後の明細の場合は、ページ下部まで
-                    y_bottom = page_bottom
+                    y_top = default_y_top
                 
-                # 範囲が負にならないように確認
-                if y_bottom <= y_top:
-                    y_bottom = y_top - 100  # 最低100ポイントは確保
+                # この明細に関連する詳細情報を検索（明細番号より下にあるテキスト）
+                detail_info_elements = []
+                
+                # 現在の明細番号から次の明細番号（または顧客情報）までのテキスト要素を収集
+                next_boundary = None
+                
+                if i < len(number_positions) - 1:
+                    # 次の明細番号がある場合
+                    next_detail_y = number_positions[i + 1][1]
+                    
+                    # 次の明細番号の前にある顧客情報の有無を確認
+                    next_customer_info = [c for c in customer_info_positions 
+                                         if c[1] < y0 and c[1] > next_detail_y]
+                    
+                    if next_customer_info:
+                        # 次の明細に関連する顧客情報がある場合、それを境界とする
+                        next_boundary = next_customer_info[0][1]
+                    else:
+                        # 顧客情報がない場合は次の明細番号を境界とする
+                        next_boundary = next_detail_y
+                else:
+                    # ページ最後の明細の場合
+                    next_boundary = page_bottom
+                
+                # 明細詳細情報を収集
+                for text, text_y1, text_y0 in all_text_elements:
+                    if text_y1 < y0 and (next_boundary is None or text_y1 > next_boundary):
+                        detail_info_elements.append((text, text_y1, text_y0))
+                
+                # 明細詳細情報があれば、その最下部をもとに下端を決定
+                if detail_info_elements:
+                    # 最も下にあるテキスト要素の下端を使用
+                    lowest_detail_y = min([item[2] for item in detail_info_elements])
+                    y_bottom = lowest_detail_y - 1  # 1ポイントのマージン
+                    
+                    # 次の境界を超えないようにする
+                    if next_boundary is not None and y_bottom < next_boundary:
+                        y_bottom = next_boundary + 1
+                else:
+                    # 詳細情報がない場合（まれ）
+                    if i < len(number_positions) - 1:
+                        y_bottom = number_positions[i + 1][1] + 1
+                    else:
+                        y_bottom = page_bottom 
+                
+                # 範囲が小さすぎないように確認
+                min_height = 30  # 最小高さを30ポイントに設定
+                if y_bottom > y_top - min_height:
+                    y_bottom = y_top - min_height
                 
                 detail_lines.append(
                     DetailLine(
@@ -116,8 +188,8 @@ class ImageProcessor:
                         no=detail_no,
                         y_top=y_top,
                         y_bottom=y_bottom,
-                        x_left=40,
-                        x_right=page_layout.width - 30,
+                        x_left=35,  
+                        x_right=page_layout.width-30,
                     )
                 )
             
