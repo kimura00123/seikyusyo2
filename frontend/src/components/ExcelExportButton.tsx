@@ -1,13 +1,22 @@
 import React, { useState, useMemo } from 'react';
-import { Button, CircularProgress, Snackbar, Alert } from '@mui/material';
+import { Button, CircularProgress, Snackbar, Alert, Backdrop, Typography, Box } from '@mui/material';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import { useDocumentStore } from '../store/documentStore';
 import { documentApi } from '../services/api';
 
 export const ExcelExportButton: React.FC = () => {
-  const { taskId, document: documentData, approvedDetails, editedDetails } = useDocumentStore();
+  const { 
+    taskId, 
+    document: documentData, 
+    approvedDetails, 
+    editedDetails, 
+    pendingApprovals, 
+    syncPendingApprovals,
+    isSyncing
+  } = useDocumentStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   // すべての明細が承認済みかチェック
   const isAllApproved = useMemo(() => {
@@ -21,12 +30,31 @@ export const ExcelExportButton: React.FC = () => {
     return approvedDetails.size === totalDetails;
   }, [documentData, approvedDetails]);
 
+  // 未同期の承認状態があるかチェック
+  const hasPendingApprovals = useMemo(() => {
+    return pendingApprovals.size > 0;
+  }, [pendingApprovals]);
+
   const handleExport = async () => {
     if (!taskId) return;
 
     try {
       setLoading(true);
       setError(null);
+
+      // 未同期の承認状態がある場合は、先に同期する
+      if (hasPendingApprovals) {
+        setSyncMessage(`承認状態を同期中です (0/${pendingApprovals.size})...`);
+        
+        // 同期処理を実行
+        const syncSuccess = await syncPendingApprovals();
+        
+        if (!syncSuccess) {
+          throw new Error('承認状態の同期に失敗しました。再試行してください。');
+        }
+        
+        setSyncMessage(null);
+      }
 
       // 編集された値がある場合は、それを含めてエクセル出力
       const blob = await documentApi.downloadExcel(taskId, editedDetails);
@@ -78,6 +106,7 @@ export const ExcelExportButton: React.FC = () => {
       setError('エクセルファイルのダウンロードに失敗しました。');
     } finally {
       setLoading(false);
+      setSyncMessage(null);
     }
   };
 
@@ -87,7 +116,7 @@ export const ExcelExportButton: React.FC = () => {
         variant="contained"
         color="primary"
         onClick={handleExport}
-        disabled={loading || !taskId || !isAllApproved}
+        disabled={loading || !taskId || !isAllApproved || isSyncing}
         startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <FileDownloadIcon />}
       >
         エクセル出力
@@ -103,6 +132,19 @@ export const ExcelExportButton: React.FC = () => {
           {error}
         </Alert>
       </Snackbar>
+
+      {/* 同期中のバックドロップ */}
+      <Backdrop
+        sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}
+        open={!!syncMessage || isSyncing}
+      >
+        <Box sx={{ textAlign: 'center' }}>
+          <CircularProgress color="inherit" />
+          <Typography sx={{ mt: 2 }}>
+            {syncMessage || '処理中...'}
+          </Typography>
+        </Box>
+      </Backdrop>
     </>
   );
 };

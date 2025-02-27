@@ -135,7 +135,6 @@ class StructuringEngine:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": text},
                 ],
-                # temperature=0,
                 response_format=DocumentStructure,
             )
 

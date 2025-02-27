@@ -33,7 +33,9 @@ export const DetailList: React.FC = () => {
     selectDetail, 
     approvedDetails, 
     approveMultipleDetails, 
-    approveAllDetails
+    approveAllDetails,
+    localApproveMultipleDetails,
+    localApproveAllDetails
   } = useDocumentStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedDetails, setSelectedDetails] = useState<Set<string>>(new Set());
@@ -109,14 +111,14 @@ export const DetailList: React.FC = () => {
 
   const handleBulkApprove = async () => {
     if (selectedDetails.size === 0) return;
-    await approveMultipleDetails(Array.from(selectedDetails), CURRENT_USER);
+    // APIリクエストを行わないローカル一括承認処理に変更
+    localApproveMultipleDetails(Array.from(selectedDetails), CURRENT_USER);
     setSelectedDetails(new Set());
   };
 
   const handleApproveAll = async () => {
-    // 未承認の明細のみを全件承認
-    const pendingDetailNos = pendingDetails.map(detail => detail.no);
-    await approveMultipleDetails(pendingDetailNos, CURRENT_USER);
+    // APIリクエストを行わないローカル全件承認処理に変更
+    localApproveAllDetails(CURRENT_USER);
     setSelectedDetails(new Set());
   };
 

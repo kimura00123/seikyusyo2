@@ -139,6 +139,8 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
     updateDetail,
     editedDetails,
     resetEditedDetail,
+    localApproveDetail,
+    localCancelApproval
   } = useDocumentStore();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -216,7 +218,9 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
     if (!selectedDetail) return;
 
     try {
-      await approveDetail(selectedDetail.no, CURRENT_USER);
+      // APIリクエストを行わないローカル承認処理に変更
+      localApproveDetail(selectedDetail.no, CURRENT_USER);
+      
       const nextDetail = getNextUnapprovedDetail();
       if (nextDetail) {
         // 次の未承認明細に移動
@@ -232,7 +236,8 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
 
   const handleCancelApproval = async () => {
     try {
-      await cancelApproval(selectedDetail.no, CURRENT_USER);
+      // APIリクエストを行わないローカル承認取消処理に変更
+      localCancelApproval(selectedDetail.no, CURRENT_USER);
       onClose();  // 承認取り消し後に自動でダイアログを閉じる
     } catch (error) {
       console.error('承認取り消しに失敗しました:', error);

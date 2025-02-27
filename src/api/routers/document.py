@@ -70,7 +70,8 @@ async def get_validation_result(task_id: str) -> Dict[str, Any]:
 
         validator = ValidationEngine()
         result = validator.validate_invoice(document)
-        return result
+        # Pydanticモデルを辞書に変換して返す
+        return result.model_dump()
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

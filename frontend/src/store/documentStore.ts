@@ -14,6 +14,8 @@ interface DocumentState {
   selectedDetail: DetailWithCustomer | null;
   approvedDetails: Map<string, { approved_at: string; approved_by: string }>;
   editedDetails: Map<string, DetailWithCustomer>;  // 編集中の値を保持
+  pendingApprovals: Map<string, { action: 'approve' | 'cancel'; userId: string; detail?: DetailWithCustomer }>;  // 未同期の承認状態
+  isSyncing: boolean;  // 同期中かどうか
 
   // アクション
   uploadDocument: (file: File) => Promise<void>;
@@ -24,11 +26,24 @@ interface DocumentState {
   clearSelectedDetail: () => void;
   updateDetail: (detailNo: string, updatedDetail: Partial<DetailWithCustomer>) => void;
   resetEditedDetail: (detailNo: string) => void;
+  
+  // 既存の承認関連メソッド（APIリクエストあり）
   approveDetail: (detailNo: string, userId: string) => Promise<void>;
   approveMultipleDetails: (detailNos: string[], userId: string) => Promise<void>;
   approveAllDetails: (userId: string) => Promise<void>;
   cancelApproval: (detailNo: string, userId: string) => Promise<void>;
   cancelMultipleApprovals: (detailNos: string[], userId: string) => Promise<void>;
+  
+  // 新しいローカル承認関連メソッド（APIリクエストなし）
+  localApproveDetail: (detailNo: string, userId: string) => void;
+  localApproveMultipleDetails: (detailNos: string[], userId: string) => void;
+  localApproveAllDetails: (userId: string) => void;
+  localCancelApproval: (detailNo: string, userId: string) => void;
+  localCancelMultipleApprovals: (detailNos: string[], userId: string) => void;
+  
+  // 一括同期メソッド
+  syncPendingApprovals: () => Promise<boolean>;
+  
   loadApprovalStatus: () => Promise<void>;
   getNextUnapprovedDetail: () => DetailWithCustomer | null;
 }
@@ -43,6 +58,8 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   selectedDetail: null,
   approvedDetails: new Map(),
   editedDetails: new Map(),
+  pendingApprovals: new Map(),
+  isSyncing: false,
 
   // アクション
   uploadDocument: async (file: File) => {
@@ -161,6 +178,8 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       selectedDetail: null,
       approvedDetails: new Map(),
       editedDetails: new Map(),
+      pendingApprovals: new Map(),
+      isSyncing: false,
     });
   },
 
@@ -362,5 +381,155 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
 
   clearSelectedDetail: () => {
     set({ selectedDetail: null });
+  },
+
+  // 新しいローカル承認メソッド（APIリクエストなし）
+  localApproveDetail: (detailNo: string, userId: string) => {
+    set(state => {
+      const now = new Date().toISOString();
+      
+      // 承認状態を更新
+      const newApprovedDetails = new Map(state.approvedDetails).set(detailNo, {
+        approved_at: now,
+        approved_by: userId,
+      });
+      
+      // 未同期リストに追加
+      const newPendingApprovals = new Map(state.pendingApprovals);
+      const editedDetail = state.editedDetails.get(detailNo);
+      newPendingApprovals.set(detailNo, { 
+        action: 'approve', 
+        userId, 
+        detail: editedDetail 
+      });
+      
+      // 編集値をクリア
+      const newEditedDetails = new Map(state.editedDetails);
+      newEditedDetails.delete(detailNo);
+      
+      return { 
+        approvedDetails: newApprovedDetails,
+        pendingApprovals: newPendingApprovals,
+        editedDetails: newEditedDetails,
+      };
+    });
+  },
+
+  localApproveMultipleDetails: (detailNos: string[], userId: string) => {
+    set(state => {
+      const now = new Date().toISOString();
+      const newApprovedDetails = new Map(state.approvedDetails);
+      const newPendingApprovals = new Map(state.pendingApprovals);
+      
+      // 各明細を処理
+      for (const detailNo of detailNos) {
+        newApprovedDetails.set(detailNo, {
+          approved_at: now,
+          approved_by: userId,
+        });
+        
+        newPendingApprovals.set(detailNo, { 
+          action: 'approve', 
+          userId 
+        });
+      }
+      
+      return { 
+        approvedDetails: newApprovedDetails,
+        pendingApprovals: newPendingApprovals,
+      };
+    });
+  },
+
+  localApproveAllDetails: (userId: string) => {
+    const { document } = get();
+    if (!document) return;
+
+    // すべての明細番号を取得
+    const allDetailNos = document.customers.flatMap(customer =>
+      customer.entries.map(entry => entry.no)
+    );
+
+    // 一括承認を実行
+    get().localApproveMultipleDetails(allDetailNos, userId);
+  },
+
+  localCancelApproval: (detailNo: string, userId: string) => {
+    set(state => {
+      // 承認状態を更新
+      const newApprovedDetails = new Map(state.approvedDetails);
+      newApprovedDetails.delete(detailNo);
+      
+      // 未同期リストに追加
+      const newPendingApprovals = new Map(state.pendingApprovals);
+      newPendingApprovals.set(detailNo, { 
+        action: 'cancel', 
+        userId 
+      });
+      
+      return { 
+        approvedDetails: newApprovedDetails,
+        pendingApprovals: newPendingApprovals,
+      };
+    });
+  },
+
+  localCancelMultipleApprovals: (detailNos: string[], userId: string) => {
+    set(state => {
+      const newApprovedDetails = new Map(state.approvedDetails);
+      const newPendingApprovals = new Map(state.pendingApprovals);
+      
+      // 各明細を処理
+      for (const detailNo of detailNos) {
+        newApprovedDetails.delete(detailNo);
+        newPendingApprovals.set(detailNo, { 
+          action: 'cancel', 
+          userId 
+        });
+      }
+      
+      return { 
+        approvedDetails: newApprovedDetails,
+        pendingApprovals: newPendingApprovals,
+      };
+    });
+  },
+
+  // 未同期の承認状態をサーバーに送信
+  syncPendingApprovals: async () => {
+    const { taskId, pendingApprovals } = get();
+    if (!taskId || pendingApprovals.size === 0) return true;
+
+    try {
+      set({ isSyncing: true, error: null });
+      
+      // 未同期リストを配列に変換
+      const pendingList = Array.from(pendingApprovals.entries());
+      
+      // 順次処理
+      for (const [detailNo, { action, userId, detail }] of pendingList) {
+        if (action === 'approve') {
+          await documentApi.approveDetail(taskId, detailNo, userId, detail);
+        } else {
+          await documentApi.cancelApproval(taskId, detailNo, userId);
+        }
+        
+        // 処理済みの項目を未同期リストから削除
+        set(state => {
+          const newPendingApprovals = new Map(state.pendingApprovals);
+          newPendingApprovals.delete(detailNo);
+          return { pendingApprovals: newPendingApprovals };
+        });
+      }
+      
+      set({ isSyncing: false });
+      return true;
+    } catch (error) {
+      set({ 
+        isSyncing: false,
+        error: error instanceof Error ? error.message : '同期に失敗しました'
+      });
+      return false;
+    }
   },
 }));
