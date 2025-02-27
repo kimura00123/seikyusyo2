@@ -119,6 +119,20 @@ async def download_excel(
                             entry.update(edited_detail)
                             logger.info(f"更新後: {entry}")
                             break
+        
+        # エクセル出力前に再度バリデーションを実行
+        logger.info("エクセル出力前のバリデーション実行")
+        validator = ValidationEngine()
+        validation_result = validator.validate_invoice(document)
+        
+        # バリデーション結果をログに出力
+        if validation_result.errors:
+            logger.warning(f"バリデーションで {len(validation_result.errors)} 件の問題が検出されました")
+            for error in validation_result.errors:
+                log_level = logging.WARNING if error.severity == "warning" else logging.ERROR
+                logger.log(log_level, f"バリデーション: {error.field} - {error.message} ({error.severity})")
+        else:
+            logger.info("バリデーション成功: 問題は検出されませんでした")
 
         logger.info("エクセル出力処理開始")
         exporter = ExcelExporter()
@@ -127,10 +141,15 @@ async def download_excel(
         exporter.export(document, excel_path)
         logger.info("エクセル出力完了")
 
+        # オリジナルのファイル名を取得して、拡張子をxlsxに変更
+        original_filename = temp_manager.get_original_filename(task_id)
+        filename_base = os.path.splitext(original_filename)[0]
+        excel_filename = f"{filename_base}.xlsx"
+
         return FileResponse(
             excel_path,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename=f"invoice_data_{task_id}.xlsx",
+            filename=excel_filename,
         )
 
     except Exception as e:

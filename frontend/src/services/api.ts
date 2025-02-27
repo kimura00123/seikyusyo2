@@ -105,12 +105,106 @@ export const documentApi = {
 
   // エクセルファイルをダウンロード
   downloadExcel: async (taskId: string, editedDetails?: Map<string, DetailWithCustomer>) => {
-    const response = await api.post<Blob>(
-      `/documents/excel/${taskId}`,
-      editedDetails ? { edited_details: Object.fromEntries(editedDetails) } : null,
-      { responseType: 'blob' }
-    );
-    return response.data;
+    try {
+      console.log('Excel出力リクエスト開始:', taskId);
+      
+      // 編集データがある場合はログ出力
+      if (editedDetails && editedDetails.size > 0) {
+        console.log(`編集データあり: ${editedDetails.size}件`);
+      }
+      
+      const response = await api.post<Blob>(
+        `/documents/excel/${taskId}`,
+        editedDetails ? { edited_details: Object.fromEntries(editedDetails) } : null,
+        { 
+          responseType: 'blob',
+          timeout: 30000, // タイムアウトを30秒に設定
+          headers: {
+            'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          }
+        }
+      );
+      
+      console.log('Excel出力レスポンス受信:', {
+        status: response.status,
+        contentType: response.headers['content-type'],
+        contentLength: response.headers['content-length'],
+        contentDisposition: response.headers['content-disposition'],
+        blobSize: response.data.size
+      });
+      
+      // Content-Dispositionヘッダーからファイル名を抽出（サーバーから提供されている場合）
+      const contentDisposition = response.headers['content-disposition'];
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (filenameMatch && filenameMatch[1]) {
+          // ファイル名を抽出して引用符を削除
+          let extractedFilename = filenameMatch[1].replace(/['"]/g, '');
+          console.log('サーバーから提供されたファイル名:', extractedFilename);
+          
+          // ファイル名をレスポンスデータに添付
+          Object.defineProperty(response.data, 'filename', {
+            value: extractedFilename,
+            writable: true
+          });
+        }
+      }
+      
+      // レスポンスの検証
+      if (!response.data || response.data.size === 0) {
+        throw new Error('サーバーから空のファイルが返されました');
+      }
+      
+      // Content-Typeの検証
+      const contentType = response.headers['content-type'];
+      if (contentType && (
+        contentType.includes('json') || 
+        contentType.includes('text/plain') || 
+        contentType.includes('text/html')
+      )) {
+        // JSONまたはテキストの場合はエラーメッセージとして読み取る
+        const text = await response.data.text();
+        try {
+          const errorData = JSON.parse(text);
+          throw new Error(errorData.detail || 'サーバーエラーが発生しました');
+        } catch (parseError) {
+          throw new Error(`サーバーエラー: ${text}`);
+        }
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('Excel出力エラー:', error);
+      
+      // Axiosエラーの詳細情報を出力
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as any;
+        console.error('API Error Details:', {
+          status: axiosError.response?.status,
+          statusText: axiosError.response?.statusText,
+          data: axiosError.response?.data,
+          headers: axiosError.response?.headers,
+          message: axiosError.message
+        });
+        
+        // エラーレスポンスがBlobの場合はテキストとして読み取る
+        if (axiosError.response?.data instanceof Blob) {
+          axiosError.response.data.text().then((text: string) => {
+            console.error('エラーレスポンスの内容:', text);
+            try {
+              const errorData = JSON.parse(text);
+              console.error('解析されたエラー:', errorData);
+            } catch (e) {
+              // JSONとして解析できない場合は何もしない
+            }
+          }).catch((e: any) => {
+            console.error('エラーレスポンスの読み取りに失敗:', e);
+          });
+        }
+      }
+      
+      throw error;
+    }
   },
 
   // 明細を承認

@@ -16,6 +16,8 @@ interface DocumentState {
   editedDetails: Map<string, DetailWithCustomer>;  // 編集中の値を保持
   pendingApprovals: Map<string, { action: 'approve' | 'cancel'; userId: string; detail?: DetailWithCustomer }>;  // 未同期の承認状態
   isSyncing: boolean;  // 同期中かどうか
+  isOfflineMode: boolean;  // オフラインモードかどうか
+  networkError: string | null;  // ネットワークエラーメッセージ
 
   // アクション
   uploadDocument: (file: File) => Promise<void>;
@@ -42,7 +44,12 @@ interface DocumentState {
   localCancelMultipleApprovals: (detailNos: string[], userId: string) => void;
   
   // 一括同期メソッド
-  syncPendingApprovals: () => Promise<boolean>;
+  syncPendingApprovals: (progressCallback?: (current: number, total: number) => void) => Promise<boolean>;
+  
+  // オフラインモード関連
+  setOfflineMode: (enabled: boolean) => void;
+  saveToLocalStorage: () => void;
+  loadFromLocalStorage: () => void;
   
   loadApprovalStatus: () => Promise<void>;
   getNextUnapprovedDetail: () => DetailWithCustomer | null;
@@ -60,6 +67,8 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   editedDetails: new Map(),
   pendingApprovals: new Map(),
   isSyncing: false,
+  isOfflineMode: false,
+  networkError: null,
 
   // アクション
   uploadDocument: async (file: File) => {
@@ -180,6 +189,8 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       editedDetails: new Map(),
       pendingApprovals: new Map(),
       isSyncing: false,
+      isOfflineMode: false,
+      networkError: null,
     });
   },
 
@@ -318,8 +329,14 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
 
   loadApprovalStatus: async () => {
-    const { taskId } = get();
+    const { taskId, isOfflineMode } = get();
     if (!taskId) return;
+
+    // オフラインモードの場合はローカルストレージから読み込む
+    if (isOfflineMode) {
+      get().loadFromLocalStorage();
+      return;
+    }
 
     try {
       const result = await documentApi.getApprovalStatus(taskId);
@@ -333,9 +350,27 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         ])
       );
       set({ approvedDetails });
+      
+      // 成功したらローカルストレージにも保存
+      get().saveToLocalStorage();
     } catch (error) {
+      console.error('承認状態の取得に失敗しました:', error);
+      
+      // ネットワークエラーの場合はローカルストレージから読み込む
+      get().loadFromLocalStorage();
+      
+      const errorMessage = error instanceof Error ? error.message : '承認状態の取得に失敗しました';
+      const isNetworkError = 
+        errorMessage.includes('network') || 
+        errorMessage.includes('Failed to fetch') || 
+        errorMessage.includes('getaddrinfo failed') ||
+        errorMessage.includes('ECONNREFUSED');
+      
       set({ 
-        error: error instanceof Error ? error.message : '承認状態の取得に失敗しました'
+        error: errorMessage,
+        networkError: isNetworkError ? errorMessage : null,
+        // ネットワークエラーの場合は自動的にオフラインモードに切り替え
+        isOfflineMode: isNetworkError
       });
     }
   },
@@ -496,40 +531,140 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
 
   // 未同期の承認状態をサーバーに送信
-  syncPendingApprovals: async () => {
-    const { taskId, pendingApprovals } = get();
+  syncPendingApprovals: async (progressCallback?: (current: number, total: number) => void) => {
+    const { taskId, pendingApprovals, isOfflineMode } = get();
     if (!taskId || pendingApprovals.size === 0) return true;
+    
+    // オフラインモードの場合は同期をスキップして成功を返す
+    if (isOfflineMode) {
+      console.log('オフラインモード: 同期をスキップします');
+      return true;
+    }
 
     try {
-      set({ isSyncing: true, error: null });
+      set({ isSyncing: true, error: null, networkError: null });
       
       // 未同期リストを配列に変換
       const pendingList = Array.from(pendingApprovals.entries());
       
       // 順次処理
-      for (const [detailNo, { action, userId, detail }] of pendingList) {
-        if (action === 'approve') {
-          await documentApi.approveDetail(taskId, detailNo, userId, detail);
-        } else {
-          await documentApi.cancelApproval(taskId, detailNo, userId);
+      for (let i = 0; i < pendingList.length; i++) {
+        const [detailNo, { action, userId, detail }] = pendingList[i];
+        try {
+          if (action === 'approve') {
+            await documentApi.approveDetail(taskId, detailNo, userId, detail);
+          } else {
+            await documentApi.cancelApproval(taskId, detailNo, userId);
+          }
+          
+          // 処理済みの項目を未同期リストから削除
+          set(state => {
+            const newPendingApprovals = new Map(state.pendingApprovals);
+            newPendingApprovals.delete(detailNo);
+            return { pendingApprovals: newPendingApprovals };
+          });
+          
+          // 進捗コールバックを呼び出す
+          if (progressCallback) {
+            progressCallback(i + 1, pendingList.length);
+          }
+        } catch (error) {
+          console.error(`明細 ${detailNo} の同期に失敗しました:`, error);
+          // 個別のエラーは記録するが、処理は続行
+          // 失敗した項目は pendingApprovals に残るので、次回の同期で再試行される
         }
-        
-        // 処理済みの項目を未同期リストから削除
-        set(state => {
-          const newPendingApprovals = new Map(state.pendingApprovals);
-          newPendingApprovals.delete(detailNo);
-          return { pendingApprovals: newPendingApprovals };
-        });
       }
+      
+      // 同期が完了したらローカルストレージに保存
+      get().saveToLocalStorage();
       
       set({ isSyncing: false });
       return true;
     } catch (error) {
+      console.error('同期処理全体が失敗しました:', error);
+      
+      // ネットワークエラーの場合はオフラインモードを提案
+      const errorMessage = error instanceof Error ? error.message : '同期に失敗しました';
+      const isNetworkError = 
+        errorMessage.includes('network') || 
+        errorMessage.includes('Failed to fetch') || 
+        errorMessage.includes('getaddrinfo failed') ||
+        errorMessage.includes('ECONNREFUSED');
+      
       set({ 
         isSyncing: false,
-        error: error instanceof Error ? error.message : '同期に失敗しました'
+        error: errorMessage,
+        networkError: isNetworkError ? errorMessage : null
       });
+      
       return false;
+    }
+  },
+
+  // オフラインモードの設定
+  setOfflineMode: (enabled: boolean) => {
+    set({ isOfflineMode: enabled });
+    
+    // オフラインモードを有効にした場合は、現在の状態をローカルストレージに保存
+    if (enabled) {
+      get().saveToLocalStorage();
+    }
+  },
+  
+  // 現在の状態をローカルストレージに保存
+  saveToLocalStorage: () => {
+    const { 
+      taskId, 
+      document, 
+      approvedDetails, 
+      editedDetails, 
+      pendingApprovals 
+    } = get();
+    
+    if (!taskId) return;
+    
+    try {
+      // Map型はJSONに直接シリアライズできないので、配列に変換
+      const data = {
+        taskId,
+        document,
+        approvedDetails: Array.from(approvedDetails.entries()),
+        editedDetails: Array.from(editedDetails.entries()),
+        pendingApprovals: Array.from(pendingApprovals.entries()),
+        timestamp: new Date().toISOString()
+      };
+      
+      localStorage.setItem(`document_state_${taskId}`, JSON.stringify(data));
+      console.log('状態をローカルストレージに保存しました');
+    } catch (error) {
+      console.error('ローカルストレージへの保存に失敗しました:', error);
+    }
+  },
+  
+  // ローカルストレージから状態を読み込み
+  loadFromLocalStorage: () => {
+    const { taskId } = get();
+    if (!taskId) return;
+    
+    try {
+      const storedData = localStorage.getItem(`document_state_${taskId}`);
+      if (!storedData) return;
+      
+      const data = JSON.parse(storedData);
+      
+      // 保存されたデータが現在のタスクIDと一致するか確認
+      if (data.taskId !== taskId) return;
+      
+      set({
+        document: data.document,
+        approvedDetails: new Map(data.approvedDetails),
+        editedDetails: new Map(data.editedDetails),
+        pendingApprovals: new Map(data.pendingApprovals)
+      });
+      
+      console.log('ローカルストレージから状態を読み込みました');
+    } catch (error) {
+      console.error('ローカルストレージからの読み込みに失敗しました:', error);
     }
   },
 }));

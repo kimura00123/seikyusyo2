@@ -65,14 +65,42 @@ class StructuringEngine:
             azure_endpoint=get_settings().AZURE_OPENAI_ENDPOINT,
         )
 
+    def _preprocess_text_for_llm(self, text: str) -> str:
+        """
+        LLMに渡す前にテキストを前処理する
+        特定の文字列を削除または置換する
+        
+        Args:
+            text: 前処理するテキスト
+            
+        Returns:
+            前処理されたテキスト
+        """
+        # 削除または置換する文字列のリスト
+        # 将来的に他の文字列も追加できるようにリストで管理
+        replacements = [
+            ("（単体）", ""),  # 全角括弧の「単体」を削除
+            ("(単体)", ""),    # 半角括弧の「単体」を削除
+            
+        ]
+        
+        # 各置換処理を適用
+        processed_text = text
+        for target, replacement in replacements:
+            processed_text = processed_text.replace(target, replacement)
+        
+        logger.debug(f"テキスト前処理を実行: {len(replacements)}個の置換パターンを適用")
+        return processed_text
+
     def structure_invoice(
         self, text_content: str
     ) -> DocumentStructure:
         """テキスト要素を構造化データに変換する（改善版）"""
-        # テキストを直接使用
-        text = text_content
+        # テキストを前処理
+        text = self._preprocess_text_for_llm(text_content)
 
-        pdf_filename = os.path.basename(self.pdf_path)
+        # オリジナルのファイル名を取得
+        pdf_filename = temp_manager.get_original_filename(self.task_id)
 
         # Azure OpenAI APIにプロンプトを送信
         try:
@@ -100,7 +128,7 @@ class StructuringEngine:
 
     3. 明細の抽出ルール：
        - 明細番号（No）は連続性を保つ
-       - 欠番がある場合も、実際に見つかった番号を使用する（連番を強制しない）
+       - 同じ会社名が複数回出現する場合でも、それぞれを別の明細として正確に抽出する
        - 明細の基本情報（明細番号、摘要、消費税率、金額）を抽出
        - 各明細に関連する追加情報（日付範囲、在庫情報、数量情報）も漏れなく抽出
        - 明細行の後に続く補足情報（時間指定なし、配送先住所等）は適切に処理
