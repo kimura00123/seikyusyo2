@@ -3,8 +3,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
+from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
-from pydantic import BaseSettings
 
 # .envファイルの読み込み
 load_dotenv()

@@ -8,15 +8,15 @@ from src.core.structuring import StructuringEngine
 from src.core.validation import ValidationEngine
 from src.core.image_processor import ImageProcessor
 from src.core.excel_exporter import ExcelExporter
-from src.utils.temp_file_manager import TempFileManager
+from src.utils.temp_manager import temp_manager
+from src.utils.config import get_settings
 
 # ロガーの設定
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["documents"])
 
-# 一時ファイル管理
-temp_manager = TempFileManager(temp_dir=os.path.join(os.getcwd(), "temp"))
+settings = get_settings()
 
 
 @router.post("/upload")
@@ -33,10 +33,10 @@ async def upload_document(file: UploadFile = File(...)) -> Dict[str, str]:
         # 非同期処理を開始（実際の環境では非同期キューを使用）
         # ここではデモのため同期的に処理
         parser = PDFParser(pdf_path)
-        text_elements = parser.extract_text_with_positions()
+        text_content = parser.extract_text_with_positions()
 
-        structurer = StructuringEngine(pdf_path)
-        document = structurer.structure_invoice(text_elements)
+        structurer = StructuringEngine(pdf_path, task_id)
+        document = structurer.structure_invoice(text_content)
 
         # 結果を一時保存（辞書形式に変換）
         temp_manager.save_result(task_id, document.model_dump())
@@ -80,21 +80,13 @@ async def get_validation_result(task_id: str) -> Dict[str, Any]:
 async def get_detail_image(task_id: str, detail_no: str) -> FileResponse:
     """明細行の画像を取得する"""
     try:
-        document = temp_manager.get_result(task_id)
-        if not document:
-            raise HTTPException(status_code=404, detail="Document not found")
-
-        pdf_path = temp_manager.get_pdf_path(task_id)
-        processor = ImageProcessor()
-
-        # 画像を一時ファイルとして保存
         image_path = temp_manager.get_image_path(task_id, detail_no)
         if not os.path.exists(image_path):
-            processor.extract_detail_image(pdf_path, detail_no, image_path)
-
+            raise HTTPException(status_code=404, detail="Image not found")
         return FileResponse(image_path)
 
     except Exception as e:
+        logger.error(f"明細画像の取得でエラー: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

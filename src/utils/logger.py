@@ -69,7 +69,7 @@ class LogManager:
     def _setup_logger(self) -> logging.Logger:
         """ロガーの設定"""
         logger = logging.getLogger('invoice_processor')
-        logger.setLevel(self.settings.LOG_LEVEL)
+        logger.setLevel(self.settings.LOG_LEVEL)  # 環境変数のログレベル
 
         # 既存のハンドラをクリア
         logger.handlers.clear()
@@ -77,6 +77,10 @@ class LogManager:
         # ファイルハンドラの設定（ローテーション付き）
         file_handler = self._setup_file_handler()
         logger.addHandler(file_handler)
+
+        # エラーログ用ファイルハンドラの設定
+        error_handler = self._setup_error_handler()
+        logger.addHandler(error_handler)
 
         # コンソールハンドラの設定
         console_handler = self._setup_console_handler()
@@ -89,23 +93,35 @@ class LogManager:
         return logger
 
     def _setup_file_handler(self) -> logging.Handler:
-        """ファイルハンドラの設定"""
+        """通常のファイルハンドラの設定"""
         log_file = Path(self.settings.LOG_DIR) / 'invoice_processor.log'
-        
-        # ローテーティングファイルハンドラの設定
         handler = logging.handlers.TimedRotatingFileHandler(
             filename=log_file,
-            when='midnight',  # 毎日0時にローテーション
-            interval=1,       # 1日ごと
-            backupCount=7,    # 7日分保持
-            encoding='utf-8', # 文字化け対策
+            when='midnight',
+            interval=1,
+            backupCount=7,
+            encoding='utf-8',
             delay=True
         )
-        
         formatter = CustomFormatter()
         handler.setFormatter(formatter)
-        handler.setLevel(self.settings.LOG_LEVEL)
-        
+        handler.setLevel(self.settings.LOG_LEVEL)  # 環境変数のログレベル
+        return handler
+
+    def _setup_error_handler(self) -> logging.Handler:
+        """エラーログ用ファイルハンドラの設定"""
+        error_log_file = Path(self.settings.LOG_DIR) / 'error.log'
+        handler = logging.handlers.TimedRotatingFileHandler(
+            filename=error_log_file,
+            when='midnight',
+            interval=1,
+            backupCount=7,
+            encoding='utf-8',
+            delay=True
+        )
+        formatter = CustomFormatter()
+        handler.setFormatter(formatter)
+        handler.setLevel(logging.ERROR)  # ERRORレベル以上
         return handler
 
     def _setup_console_handler(self) -> logging.Handler:
@@ -113,7 +129,7 @@ class LogManager:
         handler = logging.StreamHandler(sys.stdout)
         formatter = CustomFormatter()
         handler.setFormatter(formatter)
-        handler.setLevel(self.settings.LOG_LEVEL)
+        handler.setLevel(logging.INFO)  # INFOレベル以上
         return handler
 
     def get_logger(self) -> logging.Logger:
@@ -123,12 +139,15 @@ class LogManager:
 # シングルトンインスタンス
 _log_manager: Optional[LogManager] = None
 
-def get_logger() -> logging.Logger:
+def get_logger(name: str = None) -> logging.Logger:
     """ロガーのグローバルアクセサ"""
     global _log_manager
     if _log_manager is None:
         _log_manager = LogManager()
-    return _log_manager.get_logger()
+    logger = _log_manager.get_logger()
+    if name:
+        logger = logger.getChild(name)
+    return logger
 
 # 使用例:
 """

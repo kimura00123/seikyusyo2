@@ -33,8 +33,7 @@ export const DetailList: React.FC = () => {
     selectDetail, 
     approvedDetails, 
     approveMultipleDetails, 
-    approveAllDetails,
-    cancelMultipleApprovals
+    approveAllDetails
   } = useDocumentStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedDetails, setSelectedDetails] = useState<Set<string>>(new Set());
@@ -65,6 +64,9 @@ export const DetailList: React.FC = () => {
     }
   });
 
+  // 未承認の明細のみを取得
+  const pendingDetails = allDetails.filter(detail => !approvedDetails.has(detail.no));
+
   const handleDetailClick = (detail: DetailWithCustomer, event: React.MouseEvent) => {
     // チェックボックスセル内のクリックは無視
     const target = event.target as HTMLElement;
@@ -73,17 +75,19 @@ export const DetailList: React.FC = () => {
     }
 
     if (event.ctrlKey) {
-      // Ctrl+クリックで選択状態を切り替え
+      // Ctrl+クリックで選択状態を切り替え（承認済みの明細は選択不可）
       event.preventDefault();
-      setSelectedDetails(prev => {
-        const newSet = new Set(prev);
-        if (newSet.has(detail.no)) {
-          newSet.delete(detail.no);
-        } else {
-          newSet.add(detail.no);
-        }
-        return newSet;
-      });
+      if (!approvedDetails.has(detail.no)) {
+        setSelectedDetails(prev => {
+          const newSet = new Set(prev);
+          if (newSet.has(detail.no)) {
+            newSet.delete(detail.no);
+          } else {
+            newSet.add(detail.no);
+          }
+          return newSet;
+        });
+      }
     } else {
       // 通常クリックでダイアログを開く
       selectDetail(detail);
@@ -93,9 +97,11 @@ export const DetailList: React.FC = () => {
 
   const handleSelectAll = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.checked) {
-      // フィルター適用後の明細のみを選択対象とする
-      const filteredDetailNos = filteredDetails.map(detail => detail.no);
-      setSelectedDetails(new Set(filteredDetailNos));
+      // フィルター適用後の未承認明細のみを選択対象とする
+      const selectableDetails = filteredDetails
+        .filter(detail => !approvedDetails.has(detail.no))
+        .map(detail => detail.no);
+      setSelectedDetails(new Set(selectableDetails));
     } else {
       setSelectedDetails(new Set());
     }
@@ -108,13 +114,9 @@ export const DetailList: React.FC = () => {
   };
 
   const handleApproveAll = async () => {
-    await approveAllDetails(CURRENT_USER);
-    setSelectedDetails(new Set());
-  };
-
-  const handleCancelApprovals = async () => {
-    if (selectedDetails.size === 0) return;
-    await cancelMultipleApprovals(Array.from(selectedDetails), CURRENT_USER);
+    // 未承認の明細のみを全件承認
+    const pendingDetailNos = pendingDetails.map(detail => detail.no);
+    await approveMultipleDetails(pendingDetailNos, CURRENT_USER);
     setSelectedDetails(new Set());
   };
 
@@ -129,6 +131,9 @@ export const DetailList: React.FC = () => {
 
   // 承認進捗率の計算
   const progressPercentage = (approvedDetails.size / allDetails.length) * 100;
+
+  // 選択可能な明細の数（未承認の明細のみ）
+  const selectableDetailsCount = filteredDetails.filter(detail => !approvedDetails.has(detail.no)).length;
 
   return (
     <Box sx={{ mt: 4 }}>
@@ -187,21 +192,11 @@ export const DetailList: React.FC = () => {
               variant="outlined"
               color="success"
               onClick={handleApproveAll}
+              disabled={pendingDetails.length === 0}
             >
-              全件承認
+              未承認明細を全件承認 ({pendingDetails.length}件)
             </Button>
           </Box>
-          {/* 承認取り消しボタン */}
-          <Button
-            variant="outlined"
-            color="error"
-            onClick={handleCancelApprovals}
-            disabled={selectedDetails.size === 0 || 
-              // 選択された明細のうち、承認済みのものがない場合は無効化
-              !Array.from(selectedDetails).some(detailNo => approvedDetails.has(detailNo))}
-          >
-            選択した明細の承認を取り消し
-          </Button>
         </Box>
       </Box>
 
@@ -211,9 +206,10 @@ export const DetailList: React.FC = () => {
             <TableRow>
               <TableCell padding="checkbox">
                 <Checkbox
-                  indeterminate={selectedDetails.size > 0 && selectedDetails.size < filteredDetails.length}
-                  checked={selectedDetails.size === filteredDetails.length && filteredDetails.length > 0}
+                  indeterminate={selectedDetails.size > 0 && selectedDetails.size < selectableDetailsCount}
+                  checked={selectedDetails.size === selectableDetailsCount && selectableDetailsCount > 0}
                   onChange={handleSelectAll}
+                  disabled={selectableDetailsCount === 0}
                 />
               </TableCell>
               <TableCell>明細番号</TableCell>
@@ -240,16 +236,20 @@ export const DetailList: React.FC = () => {
                     checked={selectedDetails.has(detail.no)}
                     onChange={(e) => {
                       e.stopPropagation();
-                      setSelectedDetails(prev => {
-                        const newSet = new Set(prev);
-                        if (e.target.checked) {
-                          newSet.add(detail.no);
-                        } else {
-                          newSet.delete(detail.no);
-                        }
-                        return newSet;
-                      });
+                      // 承認済みの明細は選択不可
+                      if (!approvedDetails.has(detail.no)) {
+                        setSelectedDetails(prev => {
+                          const newSet = new Set(prev);
+                          if (e.target.checked) {
+                            newSet.add(detail.no);
+                          } else {
+                            newSet.delete(detail.no);
+                          }
+                          return newSet;
+                        });
+                      }
                     }}
+                    disabled={approvedDetails.has(detail.no)}
                   />
                 </TableCell>
                 <TableCell>{detail.no}</TableCell>
@@ -261,10 +261,9 @@ export const DetailList: React.FC = () => {
                 </TableCell>
                 <TableCell>{detail.description}</TableCell>
                 <TableCell align="right">
-                  {new Intl.NumberFormat('ja-JP', {
-                    style: 'currency',
-                    currency: 'JPY'
-                  }).format(parseInt(detail.amount.replace(/[^\d]/g, '')))}
+                  {typeof detail.amount === 'string' 
+                    ? parseInt(detail.amount.replace(/[^\d]/g, '')) 
+                    : detail.amount}
                 </TableCell>
                 <TableCell>{detail.tax_rate}</TableCell>
                 <TableCell>

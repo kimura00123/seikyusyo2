@@ -6,8 +6,8 @@ from datetime import datetime
 from azure.cosmos import CosmosClient, PartitionKey, exceptions
 from azure.cosmos.exceptions import CosmosResourceNotFoundError
 
-from models.approval import ApprovalStatus, ApprovalHistory
-from utils.logger import get_logger
+from src.models.approval import ApprovalStatus, ApprovalHistory
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

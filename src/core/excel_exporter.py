@@ -5,7 +5,9 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 from .structuring import DocumentStructure, CustomerEntry, EntryDetail
+from src.utils.config import get_settings
 
+settings = get_settings()
 
 class ExcelExporter:
     def __init__(self):

@@ -56,6 +56,8 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         const result = await documentApi.getProcessingStatus(task_id);
         if (result.status === 'completed') {
           set({ status: 'completed', document: result.result || null });
+          // 処理完了時にバリデーション結果も取得
+          get().getValidation();
         } else if (result.status === 'failed') {
           set({ status: 'failed', error: result.error || '処理に失敗しました' });
         } else {
@@ -80,6 +82,8 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       const result = await documentApi.getProcessingStatus(taskId);
       if (result.status === 'completed') {
         set({ status: 'completed', document: result.result || null });
+        // 処理完了時にバリデーション結果も取得
+        get().getValidation();
       } else if (result.status === 'failed') {
         set({ status: 'failed', error: result.error || '処理に失敗しました' });
       }
@@ -97,10 +101,52 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
 
     try {
       const validation = await documentApi.getValidationResult(taskId);
+      
+      // バリデーション結果をログに出力
+      console.log('Validation Result:', {
+        isValid: validation.is_valid,
+        errorsCount: validation.errors.length,
+        errors: validation.errors
+      });
+      
+      // エラーの詳細情報をログに出力
+      if (validation.errors.length > 0) {
+        console.group('Validation Errors:');
+        validation.errors.forEach((error, index) => {
+          console.log(`Error ${index + 1}:`, {
+            field: error.field,
+            message: error.message,
+            severity: error.severity
+          });
+        });
+        console.groupEnd();
+      }
+      
       set({ validation });
     } catch (error) {
+      // エラー情報をより詳細にログ出力
+      console.error('Validation fetch error:', error);
+      
+      // Axiosエラーの場合は詳細情報を取得
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as any;
+        console.error('API Error Details:', {
+          status: axiosError.response?.status,
+          statusText: axiosError.response?.statusText,
+          data: axiosError.response?.data,
+          message: axiosError.message
+        });
+      }
+      
+      // エラーメッセージをユーザーフレンドリーにする
+      const errorMessage = error instanceof Error 
+        ? `バリデーションの取得に失敗しました: ${error.message}`
+        : 'バリデーションの取得に失敗しました';
+      
       set({ 
-        error: error instanceof Error ? error.message : 'バリデーションの取得に失敗しました'
+        error: errorMessage,
+        // バリデーションエラーでもアプリケーションは継続できるようにする
+        validation: { is_valid: true, errors: [] }
       });
     }
   },

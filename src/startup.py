@@ -2,14 +2,15 @@ import os
 import sys
 import logging
 from pathlib import Path
-from utils.logger import get_logger
-from utils.config import settings
+from src.utils.logger import get_logger
+from src.utils.config import get_settings
 
 # プロジェクトルートディレクトリをPYTHONPATHに追加
 project_root = Path(__file__).parent
 sys.path.append(str(project_root))
 
 logger = get_logger(__name__)
+settings = get_settings()
 
 
 def setup_environment():
@@ -50,7 +51,7 @@ def cleanup_environment():
     """環境のクリーンアップを行う"""
     try:
         # 一時ファイルの削除
-        from utils.temp_file_manager import TempFileManager
+        from src.utils.temp_file_manager import TempFileManager
 
         temp_manager = TempFileManager(str(settings.get_temp_dir))
         temp_manager.cleanup_old_files(max_age_hours=24)
@@ -79,7 +80,12 @@ def main():
         reload = settings.is_development()
 
         logger.info(f"APIサーバーを起動: {host}:{port}")
-        uvicorn.run("api.main:app", host=host, port=port, reload=reload)
+        uvicorn.run(
+            "src.api.main:app",  # アプリケーションをインポート文字列として指定
+            host=host,
+            port=port,
+            reload=reload
+        )
 
     except Exception as e:
         logger.error(f"アプリケーションの起動でエラー: {e}", exc_info=True)
