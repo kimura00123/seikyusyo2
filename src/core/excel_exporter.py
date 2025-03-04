@@ -29,19 +29,19 @@ class ExcelExporter:
             "金額",
             "期間",
             "ページ番号",
-            "在庫情報_繰越",
-            "在庫情報_入庫",
-            "在庫情報_W値",
-            "在庫情報_出庫",
-            "在庫情報_残高",
-            "在庫情報_合計",
-            "在庫情報_単価",
-            "数量情報_数量",
-            "数量情報_単価",
+            "在庫",
+            "入庫",
+            "W値",
+            "出庫",
+            "残高",
+            "合計",
+            "単価",
+            "荷役数、廃棄数、段ボール数",
+            "単価",
             # フィルタ補助用の列を追加
-            "業務タイプ",      # 保管、荷役、運搬などのカテゴリ
-            "業務詳細",       # 詳細な業務タイプ（入庫、出庫など）
-            "業務日付"        # 期間から抽出した日付
+            "業務区分",
+            "業務内容",
+            "業務日付"
         ]
         
         # フィルタ用のマッピングを定義
@@ -208,21 +208,21 @@ class ExcelExporter:
         self.workbook.create_named_range(
             "StorageData", 
             self.sheet, 
-            f'=FILTER(InvoiceTable, InvoiceTable[業務タイプ]="保管")'
+            f'=FILTER(InvoiceTable, InvoiceTable[業務区分]="保管")'
         )
         
         # 荷役データ用の名前付き範囲
         self.workbook.create_named_range(
             "HandlingData", 
             self.sheet, 
-            f'=FILTER(InvoiceTable, InvoiceTable[業務タイプ]="荷役")'
+            f'=FILTER(InvoiceTable, InvoiceTable[業務区分]="荷役")'
         )
         
         # 運搬データ用の名前付き範囲
         self.workbook.create_named_range(
             "TransportData", 
             self.sheet, 
-            f'=FILTER(InvoiceTable, InvoiceTable[業務タイプ]="運搬")'
+            f'=FILTER(InvoiceTable, InvoiceTable[業務区分]="運搬")'
         )
 
     def _add_helper_sheet(self):
@@ -250,15 +250,15 @@ class ExcelExporter:
         helper_sheet["A13"] = "フィルタの使用方法："
         helper_sheet["A13"].font = Font(bold=True)
         
-        helper_sheet["A14"] = "1. データシートの「業務タイプ」や「業務詳細」列でフィルタリングできます。"
+        helper_sheet["A14"] = "1. データシートの「業務区分」や「業務内容」列でフィルタリングできます。"
         helper_sheet["A15"] = "2. スライサーを追加すると視覚的にフィルタリングが可能になります。"
         helper_sheet["A16"] = "3. フィルタ済みのテーブルを元にXLOOKUPを使用すれば、自動的にフィルタ条件に合致する値のみが対象になります。"
         
         helper_sheet["A18"] = "補助列について："
         helper_sheet["A18"].font = Font(bold=True)
         
-        helper_sheet["A19"] = "業務タイプ: 保管、荷役、運搬などの大分類"
-        helper_sheet["A20"] = "業務詳細: 入庫、出庫、廃棄などの詳細分類"
+        helper_sheet["A19"] = "業務区分: 保管、荷役、運搬などの大分類"
+        helper_sheet["A20"] = "業務内容: 入庫、出庫、廃棄などの詳細分類"
         helper_sheet["A21"] = "業務日付: 期間から抽出した実際の日付（運搬業務の日付フィルタ用）"
         
         # 列幅の調整
