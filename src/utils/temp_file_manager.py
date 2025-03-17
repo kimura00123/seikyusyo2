@@ -1,140 +1,85 @@
 import os
 import shutil
+import uuid
 from datetime import datetime, timedelta
-from pathlib import Path
-from typing import List
-from utils.logger import get_logger
-
-logger = get_logger(__name__)
+from typing import Dict, Any, Optional
+from fastapi import UploadFile
 
 
 class TempFileManager:
-    """一時ファイル管理クラス"""
+    def __init__(self, temp_dir: str = "temp"):
+        """一時ファイル管理クラスの初期化"""
+        self.temp_dir = temp_dir
+        self.uploads_dir = os.path.join(temp_dir, "uploads")
+        self.images_dir = os.path.join(temp_dir, "images")
+        self.processed_dir = os.path.join(temp_dir, "processed")
 
-    def __init__(self, temp_dir: str):
-        """
-        初期化
+        # 必要なディレクトリの作成
+        for directory in [
+            self.temp_dir,
+            self.uploads_dir,
+            self.images_dir,
+            self.processed_dir,
+        ]:
+            os.makedirs(directory, exist_ok=True)
 
-        Args:
-            temp_dir (str): 一時ディレクトリのパス
-        """
-        self.temp_dir = Path(temp_dir)
-        self.temp_dir.mkdir(parents=True, exist_ok=True)
+    def generate_task_id(self) -> str:
+        """一意のタスクIDを生成する"""
+        return str(uuid.uuid4())
+
+    def save_upload(self, file: UploadFile, task_id: str) -> str:
+        """アップロードされたファイルを保存する"""
+        file_path = os.path.join(self.uploads_dir, f"{task_id}.pdf")
+        with open(file_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        return file_path
+
+    def save_result(self, task_id: str, result: Dict[str, Any]) -> None:
+        """処理結果を一時保存する"""
+        result_path = os.path.join(self.processed_dir, f"{task_id}.json")
+        import json
+
+        with open(result_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+
+    def get_result(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """処理結果を取得する"""
+        result_path = os.path.join(self.processed_dir, f"{task_id}.json")
+        if not os.path.exists(result_path):
+            return None
+
+        import json
+
+        with open(result_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def get_pdf_path(self, task_id: str) -> str:
+        """PDFファイルのパスを取得する"""
+        return os.path.join(self.uploads_dir, f"{task_id}.pdf")
+
+    def get_image_path(self, task_id: str, detail_no: str) -> str:
+        """明細画像のパスを取得する"""
+        return os.path.join(self.images_dir, f"{task_id}_{detail_no}.jpg")
+
+    def get_excel_path(self, task_id: str) -> str:
+        """エクセルファイルのパスを取得する"""
+        return os.path.join(self.processed_dir, f"{task_id}.xlsx")
 
     def cleanup_old_files(self, max_age_hours: int = 24) -> int:
-        """
-        古い一時ファイルを削除する
+        """古い一時ファイルを削除する"""
+        now = datetime.now()
+        count = 0
 
-        Args:
-            max_age_hours (int, optional): 保持する最大時間（時間単位）. デフォルトは24時間.
+        for directory in [self.uploads_dir, self.images_dir, self.processed_dir]:
+            for filename in os.listdir(directory):
+                file_path = os.path.join(directory, filename)
+                file_modified = datetime.fromtimestamp(os.path.getmtime(file_path))
 
-        Returns:
-            int: 削除されたファイル数
-        """
-        try:
-            deleted_count = 0
-            cutoff_time = datetime.now() - timedelta(hours=max_age_hours)
-
-            # 一時ディレクトリ内のすべてのファイルをチェック
-            for item in self.temp_dir.glob("**/*"):
-                if not item.is_file():
-                    continue
-
-                # ファイルの最終更新時刻を取得
-                mtime = datetime.fromtimestamp(item.stat().st_mtime)
-
-                # 古いファイルを削除
-                if mtime < cutoff_time:
+                if now - file_modified > timedelta(hours=max_age_hours):
                     try:
-                        item.unlink()
-                        deleted_count += 1
-                        logger.debug(f"一時ファイルを削除: {item}")
-                    except Exception as e:
-                        logger.warning(f"ファイルの削除に失敗: {item} - {e}")
+                        os.remove(file_path)
+                        count += 1
+                    except OSError:
+                        pass
 
-            # 空のディレクトリを削除
-            self._remove_empty_dirs()
-
-            logger.info(f"一時ファイルのクリーンアップが完了: {deleted_count}件")
-            return deleted_count
-
-        except Exception as e:
-            logger.error(f"クリーンアップでエラー: {e}", exc_info=True)
-            raise
-
-    def _remove_empty_dirs(self):
-        """空のディレクトリを削除する"""
-        try:
-            for dirpath, dirnames, filenames in os.walk(self.temp_dir, topdown=False):
-                if dirpath == str(self.temp_dir):
-                    continue  # ルートディレクトリは削除しない
-
-                if not dirnames and not filenames:
-                    try:
-                        os.rmdir(dirpath)
-                        logger.debug(f"空のディレクトリを削除: {dirpath}")
-                    except Exception as e:
-                        logger.warning(f"ディレクトリの削除に失敗: {dirpath} - {e}")
-
-        except Exception as e:
-            logger.error(f"空ディレクトリの削除でエラー: {e}", exc_info=True)
-
-    def get_file_list(self, pattern: str = "*") -> List[Path]:
-        """
-        一時ファイルの一覧を取得する
-
-        Args:
-            pattern (str, optional): 検索パターン. デフォルトは"*".
-
-        Returns:
-            List[Path]: ファイルパスのリスト
-        """
-        try:
-            return list(self.temp_dir.glob(f"**/{pattern}"))
-        except Exception as e:
-            logger.error(f"ファイル一覧の取得でエラー: {e}", exc_info=True)
-            raise
-
-    def clear_all(self) -> int:
-        """
-        すべての一時ファイルを削除する
-
-        Returns:
-            int: 削除されたファイル数
-        """
-        try:
-            # ディレクトリ内のすべてのファイルを削除
-            deleted_count = 0
-            for item in self.temp_dir.glob("**/*"):
-                if item.is_file():
-                    try:
-                        item.unlink()
-                        deleted_count += 1
-                        logger.debug(f"一時ファイルを削除: {item}")
-                    except Exception as e:
-                        logger.warning(f"ファイルの削除に失敗: {item} - {e}")
-
-            # 空のディレクトリを削除
-            self._remove_empty_dirs()
-
-            logger.info(f"一時ファイルの全削除が完了: {deleted_count}件")
-            return deleted_count
-
-        except Exception as e:
-            logger.error(f"全削除でエラー: {e}", exc_info=True)
-            raise
-
-
-# 使用例:
-"""
-temp_manager = TempFileManager("/path/to/temp")
-
-# 古いファイルのクリーンアップ
-deleted_count = temp_manager.cleanup_old_files(max_age_hours=12)
-
-# ファイル一覧の取得
-files = temp_manager.get_file_list("*.pdf")
-
-# すべてのファイルの削除
-deleted_count = temp_manager.clear_all()
-"""
+        return count

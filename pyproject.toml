@@ -3,32 +3,27 @@ name = "takatuski"
 version = "0.1.0"
 description = "請求書構造化システム"
 authors = [
-    { name = "LGMorimasa", email = "morimasa@nttlogisco.com" }
+    { name = "Your Name", email = "your.email@example.com" }
 ]
 dependencies = [
-    "pyside6>=6.8.2.1",
     "fastapi>=0.115.8",
     "uvicorn>=0.34.0",
-    "gunicorn>=21.2.0",
     "python-multipart>=0.0.20",
     "pydantic>=2.10.6",
-    "azure-cosmos>=4.5.1",
-    "python-jose[cryptography]>=3.3.0",
-    "azure-storage-blob>=12.19.0",
-    "pdfminer.six>=20221105",
-    "pillow>=11.1.0",
-    "pymupdf>=1.25.3",
-    # PDFの画像抽出用
     "openpyxl>=3.1.2",
-    "python-dotenv>=1.0.1",
-    "openai>=1.63.0",
+    "pdfminer.six>=20221105",
+    "pymupdf>=1.25.3",
+    "python-dotenv>=1.0.0",
+    "openai>=1.12.0",
     "pytesseract>=0.3.10",
-    "pdfminer-six>=20240706",
-    "requests>=2.32.3",
-    # OCR機能用
+    "pillow>=11.1.0",
+    "pdf2image>=1.17.0",
+    "pymupdf4llm>=0.0.17",
+    "azure-cosmos>=4.5.1",
+    "pydantic-settings>=2.8.0",
 ]
 readme = "README.md"
-requires-python = ">= 3.8"
+requires-python = ">= 3.10"
 
 [build-system]
 requires = ["hatchling"]
@@ -36,23 +31,13 @@ build-backend = "hatchling.build"
 
 [tool.rye]
 managed = true
-dev-dependencies = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.1.0",
-    "pytest-mock>=3.12.0",
-    "pytest-asyncio>=0.23.5",
-    "pytest-qt>=4.4.0",
-]
+dev-dependencies = []
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
+[tool.rye.scripts]
+dev = "uvicorn src.api.main:app --reload"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-addopts = "--cov=src --cov-report=html --cov-report=term-missing"
-asyncio_mode = "auto"
-pythonpath = ["src"]

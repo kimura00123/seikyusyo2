@@ -1,9 +1,13 @@
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from src.utils.logger import get_logger
-from src.utils.config import settings
+from src.utils.config import get_settings
+from pydantic import ValidationError
+
+from src.core.error_handler import ErrorHandlerMiddleware
+from src.core.errors import ErrorCode, ErrorLevel
 
 # ロガーの設定
 logger = get_logger(__name__)
@@ -18,11 +22,15 @@ app = FastAPI(
 # CORSミドルウェアの設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 本番環境では適切に制限する
+    allow_origins=["http://localhost:3000"],  # フロントエンドのURL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+error_middleware = ErrorHandlerMiddleware()
+
+settings = get_settings()
 
 
 @app.on_event("startup")
@@ -68,18 +76,13 @@ async def shutdown_event():
         logger.error(f"終了処理でエラー: {e}", exc_info=True)
 
 
+@app.exception_handler(ValidationError)
+async def validation_error_handler(request: Request, exc: ValidationError):
+    return await error_middleware.handle_validation_error(request, exc)
+
 @app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    """グローバル例外ハンドラー"""
-    logger.error(f"予期せぬエラー: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={
-            "status": "error",
-            "message": "内部サーバーエラー",
-            "detail": str(exc) if settings.is_development() else None,
-        },
-    )
+async def unexpected_error_handler(request: Request, exc: Exception):
+    return await error_middleware.handle_unexpected_error(request, exc)
 
 
 @app.get("/health")
@@ -89,12 +92,17 @@ async def health_check():
 
 
 # ルーターの登録
-from src.api.routers import document_router
+from .routers import document_router, approval
 
 app.include_router(
     document_router,
-    prefix="/document",
-    tags=["document"],
+    prefix="/documents",  # プレフィックスを/documentsに変更
+    tags=["documents"],
+)
+
+app.include_router(
+    approval.router,
+    tags=["approvals"],
 )
 
 

@@ -15,7 +15,6 @@ from src.core.structuring import (
     DocumentStructure,
     StructuringEngine,
 )
-from src.core.pdf_parser import TextElement
 
 
 def test_stock_info_model():
@@ -180,142 +179,60 @@ class TestStructuringEngine:
     """StructuringEngineクラスのテスト"""
 
     @pytest.fixture
-    def sample_text_elements(self) -> Dict[int, List[TextElement]]:
-        """テスト用のテキスト要素を提供"""
-        return {
-            1: [
-                TextElement(
-                    text="テスト顧客",
-                    x0=100,
-                    y0=500,
-                    x1=200,
-                    y1=520,
-                    font_name="Arial",
-                    font_size=12,
-                    page=1,
-                ),
-                TextElement(
-                    text="¥1,000",
-                    x0=300,
-                    y0=500,
-                    x1=400,
-                    y1=520,
-                    font_name="Arial",
-                    font_size=12,
-                    page=1,
-                ),
-            ],
-            2: [
-                TextElement(
-                    text="明細1",
-                    x0=100,
-                    y0=500,
-                    x1=200,
-                    y1=520,
-                    font_name="Arial",
-                    font_size=12,
-                    page=2,
-                ),
-            ],
-        }
+    def sample_markdown_text(self) -> str:
+        """テスト用のMarkdownテキストを提供"""
+        return """
+# テスト文書
 
-    def test_preprocess_text(self, sample_text_elements):
-        """テキスト前処理のテスト"""
-        engine = StructuringEngine()
-        result = engine._preprocess_text(sample_text_elements)
+## テスト顧客
 
-        # 期待される出力形式の確認
-        assert "[x:100.0,y:500.0][font:Arial,size:12.0] テスト顧客" in result
-        assert "[x:300.0,y:500.0][font:Arial,size:12.0] ¥1,000" in result
-        assert "=== ページ区切り ===" in result
-        assert "[x:100.0,y:500.0][font:Arial,size:12.0] 明細1" in result
+金額: ¥1,000
 
-    def test_build_prompt(self):
-        """プロンプト構築のテスト"""
-        engine = StructuringEngine()
-        prompt = engine._build_prompt("テストテキスト")
+## 明細1
 
-        # プロンプトに必要な要素が含まれているか確認
-        assert "テストテキスト" in prompt
-        assert '"pdf_filename":' in prompt
-        assert '"total_amount":' in prompt
-        assert '"customers":' in prompt
-        assert '"stock_info":' in prompt
-        assert '"quantity_info":' in prompt
+詳細情報
+        """
 
-    @pytest.mark.asyncio
-    async def test_call_openai_api(self, mocker):
-        """OpenAI API呼び出しのテスト"""
+    def test_structure_invoice(self, sample_markdown_text, mocker):
+        """構造化処理のテスト"""
         # モックの設定
-        mock_client = AsyncMock()
-        mock_client.beta.chat.completions.parse.return_value = MagicMock(
-            choices=[
-                MagicMock(
-                    message=MagicMock(
-                        parsed={
-                            "pdf_filename": "test.pdf",
-                            "total_amount": "¥10,000",
-                            "customers": [],
-                        }
-                    )
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.choices[0].message.parsed = DocumentStructure(
+            pdf_filename="test.pdf",
+            total_amount=1000,
+            customers=[
+                CustomerEntry(
+                    customer_code="C001",
+                    customer_name="テスト顧客",
+                    department="営業部",
+                    box_number="BOX001",
+                    entries=[
+                        EntryDetail(
+                            no="001",
+                            description="テスト商品",
+                            tax_rate="10%",
+                            amount=1000,
+                            page_no=1,
+                        )
+                    ],
                 )
-            ]
+            ],
         )
-        mocker.patch("openai.AsyncAzureOpenAI", return_value=mock_client)
-
-        engine = StructuringEngine()
-        result = await engine._call_openai_api("テストテキスト")
-
-        # APIが正しく呼び出されたか確認
-        assert mock_client.beta.chat.completions.parse.called
-        assert result["pdf_filename"] == "test.pdf"
-        assert result["total_amount"] == "¥10,000"
-        assert result["customers"] == []
-
-    @pytest.mark.asyncio
-    async def test_structure_invoice(self, sample_text_elements, mocker):
-        """請求書構造化の統合テスト"""
-        # モックの設定
-        mock_client = AsyncMock()
-        mock_client.beta.chat.completions.parse.return_value = MagicMock(
-            choices=[
-                MagicMock(
-                    message=MagicMock(
-                        parsed={
-                            "pdf_filename": "test.pdf",
-                            "total_amount": "¥10,000",
-                            "customers": [
-                                {
-                                    "customer_code": "C001",
-                                    "customer_name": "テスト顧客",
-                                    "department": "営業部",
-                                    "box_number": "BOX001",
-                                    "entries": [
-                                        {
-                                            "no": "001",
-                                            "description": "テスト商品",
-                                            "tax_rate": "10%",
-                                            "amount": "¥1,000",
-                                            "page_no": 1,
-                                        }
-                                    ],
-                                }
-                            ],
-                        }
-                    )
-                )
-            ]
-        )
-        mocker.patch("openai.AsyncAzureOpenAI", return_value=mock_client)
-
-        engine = StructuringEngine()
-        result = await engine.structure_invoice(sample_text_elements)
-
+        
+        mock_client.beta.chat.completions.parse.return_value = mock_response
+        
+        # テスト対象のインスタンス作成
+        engine = StructuringEngine("test.pdf", "task123")
+        engine.client = mock_client
+        
+        # テスト実行
+        result = engine.structure_invoice(sample_markdown_text)
+        
         # 結果の検証
-        assert isinstance(result, DocumentStructure)
         assert result.pdf_filename == "test.pdf"
-        assert result.total_amount == "¥10,000"
+        assert result.total_amount == 1000
         assert len(result.customers) == 1
-        assert result.customers[0].customer_code == "C001"
+        assert result.customers[0].customer_name == "テスト顧客"
         assert len(result.customers[0].entries) == 1
-        assert result.customers[0].entries[0].no == "001"
+        assert result.customers[0].entries[0].amount == 1000

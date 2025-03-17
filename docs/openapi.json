@@ -1,0 +1,760 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "contact": {
+      "email": "info@lips-hci.com",
+      "name": "LIPS Support",
+      "url": "https://www.lips-hci.com/"
+    },
+    "description": "## Camera Streaming\r\n\r\nCamera is streaming in MJPEG format under localhost:7777/camera\r\n\r\n## Measure Photo\r\n\r\nMeasure photo will save after calling `measure` API. Photos are server as static files under `/images/` on the same server with filename `[timestamp].jpg`.\r\n\r\nFor example, if the response from measure API is `{..., \"timestamp\": \"1708569469\"}`. The photo for this record can be retrieve via `http://localhost:8080/images/1708569469.jpg`\r\n\r\n## General API Response\r\n```json\r\n{\r\n    \"code\": 200,\r\n    \"info\": \"Response message\",\r\n    \"data\" : {...}\r\n}\r\n```\r\n\r\n## API response code\r\n<table>\r\n    <tr>\r\n        <td>Code</td>\r\n        <td>Status</td>\r\n    </tr>\r\n    <tr>\r\n        <td>200</td>\r\n        <td>OK</td>\r\n    </tr>\r\n    <tr>\r\n        <td>400</td>\r\n        <td>Service is not initialized</td>\r\n    </tr>\r\n    <tr>\r\n        <td>403</td>\r\n        <td>Calibration function is not allowed</td>\r\n    </tr>\r\n    <tr>\r\n        <td>411</td>\r\n        <td>Calibration failed</td>\r\n    </tr>\r\n    <tr>\r\n        <td>412</td>\r\n        <td>Wrong calibration result</td>\r\n    </tr>\r\n    <tr>\r\n        <td>413</td>\r\n        <td>Measure failed</td>\r\n    </tr>\r\n    <tr>\r\n        <td>414</td>\r\n        <td>Trail license expired</td>\r\n    </tr>\r\n    <tr>\r\n        <td>415</td>\r\n        <td>Measured object is not within ROI</td>\r\n    </tr>\r\n    <tr>\r\n        <td>416</td>\r\n        <td>Invalid license</td>\r\n    </tr>\r\n    <tr>\r\n        <td>418</td>\r\n        <td>Calibration data is not found or corrupted</td>\r\n    </tr>\r\n    <tr>\r\n        <td>500</td>\r\n        <td>Service internal error</td>\r\n    </tr>\r\n    <tr>\r\n        <td>501</td>\r\n        <td>API server is not available</td>\r\n    </tr>\r\n</table>",
+    "license": {
+      "name": "©2024 by LIPS Corporation. All rights reserved.",
+      "url": "https://www.lips-hci.com/"
+    },
+    "title": "LIPS LDS Service",
+    "version": "1.3.0.3601"
+  },
+  "paths": {
+    "/v1/calibrate": {
+      "post": {
+        "description": "The `height` in response means the distance between the camera and ground. This value should be < 1cm to the real distance",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/apiServer.ResponseObj"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/service.CalibrateResp"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "Calibrate",
+        "tags": [
+          "measure"
+        ]
+      }
+    },
+    "/v1/measure": {
+      "post": {
+        "description": "Measure the object. The \"pxN, pyN\" returned in the API represents the 8 coordinate points of the bounding box of the object. (N=1~8, 1 to 4 are the points on top. 5 to 8 are the points at bottom) With these 8 points, we can draw the bounding box like in below image. As you can see the blue and green lines around the white box. <img src=\"/doc-images/measure_result.png\"/>",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/apiServer.ResponseObj"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/service.MeasureResp"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "Measure the object and get the dimension",
+        "tags": [
+          "measure"
+        ]
+      }
+    },
+    "/v1/peripheral/print_label": {
+      "post": {
+        "description": "Print label with measurement info. Supported template(s): ['LDS_Template_cm_en.lbx']",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/controller.PrintLabelReq"
+              }
+            }
+          },
+          "description": "body",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/apiServer.ResponseObj"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/controller.PrintLabelResp"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "Print label with measurement info",
+        "tags": [
+          "Peripheral"
+        ]
+      }
+    },
+    "/v1/record/": {
+      "delete": {
+        "description": "Delete records by id",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/controller.DeleteRecordReq"
+              }
+            }
+          },
+          "description": "body",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Delete Records",
+        "tags": [
+          "record"
+        ]
+      },
+      "get": {
+        "description": "Query record by conditions",
+        "parameters": [
+          {
+            "description": "Serial Number",
+            "in": "query",
+            "name": "sn",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Number of records to query",
+            "in": "query",
+            "name": "num",
+            "schema": {
+              "type": "number",
+              "default": 10
+            }
+          },
+          {
+            "description": "query record start from (in millisecond)",
+            "in": "query",
+            "name": "start",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "description": "query record end with (in millisecond)",
+            "in": "query",
+            "name": "end",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "query record width greater than widthGt",
+            "in": "query",
+            "name": "widthGt",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "description": "query record width less than widthLt",
+            "in": "query",
+            "name": "widthLt",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "description": "query record height greater than heightGt",
+            "in": "query",
+            "name": "heightGt",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "description": "query record height less than heightLt",
+            "in": "query",
+            "name": "heightLt",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "description": "query record length greater than lengthGt",
+            "in": "query",
+            "name": "lengthGt",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "description": "query record length less than lengthLt",
+            "in": "query",
+            "name": "lengthLt",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "description": "query record length greater than weightGt",
+            "in": "query",
+            "name": "weightGt",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "description": "query record length less than weightLt",
+            "in": "query",
+            "name": "weightLt",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "description": "weight might be null. Set true to convert null value to 0",
+            "in": "query",
+            "name": "convertNull",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "description": "order by record created time in descend",
+            "in": "query",
+            "name": "orderDesc",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/apiServer.ResponseObj"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/controller.GetRecordRes"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "Query measurement records",
+        "tags": [
+          "record"
+        ]
+      }
+    },
+    "/v1/record/count": {
+      "get": {
+        "description": "Get number of records in database",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/apiServer.ResponseObj"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/controller.GetRecordCountRes"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "GetRecordCount",
+        "tags": [
+          "record"
+        ]
+      }
+    },
+    "/v1/set_draw_roi": {
+      "put": {
+        "description": "Display ROI in frame or not",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/controller.SetDrawRoiReq"
+              }
+            }
+          },
+          "description": "body",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/apiServer.ResponseObj"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/service.SetDrawRoiResp"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "ROI Display",
+        "tags": [
+          "setting"
+        ]
+      }
+    },
+    "/v1/set_roi": {
+      "put": {
+        "description": "Set the ROI for calibration or measurement.\n`width` represents the ratio of the width of ROI to the width of the entire image.\n`height` represents the ratio of the height of ROI to the height of the entire image.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/controller.SetRoiReq"
+              }
+            }
+          },
+          "description": "body",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/apiServer.ResponseObj"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/service.SetRoiResp"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "ROI",
+        "tags": [
+          "setting"
+        ]
+      }
+    },
+    "/v1/system_info": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/apiServer.ResponseObj"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/service.SystemInfoResp"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get the system info",
+        "tags": [
+          "measure"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "//localhost:8080"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "apiServer.ResponseObj": {
+        "properties": {
+          "code": {
+            "example": 200,
+            "type": "integer"
+          },
+          "data": {},
+          "info": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "data",
+          "info"
+        ],
+        "type": "object"
+      },
+      "controller.DeleteRecordReq": {
+        "properties": {
+          "idList": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "controller.GetRecordCountRes": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "controller.GetRecordRes": {
+        "properties": {
+          "recordList": {
+            "items": {
+              "$ref": "#/components/schemas/controller.RecordDto"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "controller.PrintLabelReq": {
+        "properties": {
+          "height": {
+            "type": "number"
+          },
+          "length": {
+            "type": "number"
+          },
+          "template": {
+            "enum": [
+              "LDS_Template_cm_en.lbx"
+            ],
+            "type": "string"
+          },
+          "weight": {
+            "type": "number"
+          },
+          "width": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "controller.PrintLabelResp": {
+        "properties": {
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "controller.RecordDto": {
+        "properties": {
+          "createdAt": {
+            "type": "integer"
+          },
+          "height": {
+            "type": "number"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "length": {
+            "type": "number"
+          },
+          "sn": {
+            "type": "string"
+          },
+          "temperature": {
+            "type": "number"
+          },
+          "weight": {
+            "type": "number"
+          },
+          "width": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "controller.SetDrawRoiReq": {
+        "properties": {
+          "enable": {
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "measure",
+              "calibrate"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "controller.SetRoiReq": {
+        "properties": {
+          "height": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "type": {
+            "enum": [
+              "measure",
+              "calibrate"
+            ],
+            "type": "string"
+          },
+          "width": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "service.CalibrateResp": {
+        "properties": {
+          "height": {
+            "type": "number"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "service.MeasureResp": {
+        "properties": {
+          "height": {
+            "type": "number"
+          },
+          "length": {
+            "type": "number"
+          },
+          "px1": {
+            "type": "number"
+          },
+          "px2": {
+            "type": "number"
+          },
+          "px3": {
+            "type": "number"
+          },
+          "px4": {
+            "type": "number"
+          },
+          "px5": {
+            "type": "number"
+          },
+          "px6": {
+            "type": "number"
+          },
+          "px7": {
+            "type": "number"
+          },
+          "px8": {
+            "type": "number"
+          },
+          "py1": {
+            "type": "number"
+          },
+          "py2": {
+            "type": "number"
+          },
+          "py3": {
+            "type": "number"
+          },
+          "py4": {
+            "type": "number"
+          },
+          "py5": {
+            "type": "number"
+          },
+          "py6": {
+            "type": "number"
+          },
+          "py7": {
+            "type": "number"
+          },
+          "py8": {
+            "type": "number"
+          },
+          "sn": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "temperature": {
+            "type": "number"
+          },
+          "timestamp": {
+            "type": "integer"
+          },
+          "weight": {
+            "type": "number"
+          },
+          "width": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "service.SetDrawRoiResp": {
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "service.SetRoiResp": {
+        "properties": {
+          "height": {
+            "type": "number"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "type": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "service.SystemInfoResp": {
+        "properties": {
+          "apiVersion": {
+            "type": "string"
+          },
+          "cameraHeight": {
+            "type": "integer"
+          },
+          "cameraName": {
+            "type": "string"
+          },
+          "cameraSerial": {
+            "type": "string"
+          },
+          "cameraWidth": {
+            "type": "integer"
+          },
+          "isScaleEnabled": {
+            "type": "boolean"
+          },
+          "product": {
+            "type": "string"
+          },
+          "rulerDebug": {
+            "type": "boolean"
+          },
+          "scalePort": {
+            "type": "string"
+          },
+          "scaleType": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    }
+  }
+}

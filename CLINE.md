@@ -34,7 +34,7 @@ graph TD
 ```mermaid
 graph TB
     subgraph "フロントエンド"
-        A[PySide6 UI]
+        A[React UI]
         B[請求書表示コンポーネント]
         C[編集コンポーネント]
     end
@@ -63,8 +63,11 @@ graph TB
 
 ### 2.2 使用技術スタック
 - **フロントエンド**
-  - PySide6：デスクトップUIフレームワーク
-  - Qt Quick：UIコンポーネント
+  - React：UIライブラリ
+  - TypeScript：型システム
+  - Material-UI：UIコンポーネント
+  - Axios：APIクライアント
+  - Zustand：状態管理
 
 - **バックエンド**
   - Python 3.10：基本実行環境
@@ -81,7 +84,7 @@ graph TB
 ### 2.3 インフラストラクチャ構成
 ```mermaid
 graph LR
-    A[クライアントPC] --> B[Azure Web App Service]
+    A[ブラウザ] --> B[Azure Static Web Apps]
     B --> C[Azure OpenAI Service]
     B --> D[Azure CosmosDB]
     B --> E[ローカルストレージ]
@@ -623,57 +626,176 @@ class ImageProcessor:
 2. 視覚的フィードバック
    - 処理状態の明示
    - エラー箇所の強調表示
+   - 承認状態の視覚化
 3. 操作効率の最適化
    - キーボードショートカット
    - 一括処理機能
+   - フィルター機能
 
 #### 3.6.2 画面構成の考え方
 1. 明細一覧パネル
    - 効率的なナビゲーション
    - 状態の視覚化
+   - 一括承認機能
+   - フィルター機能
 2. 詳細表示パネル
    - クロップ画像とデータの同時表示
    - インラインでの編集機能
+   - 承認/取り消し機能
 3. 操作フィードバック
    - 処理状況のリアルタイム表示
    - エラー情報の即時フィードバック
+   - 承認状態の表示
 
 #### 3.6.3 実装コード
-```python
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.init_ui()
+```typescript
+// 明細一覧コンポーネント
+export const DetailList: React.FC = () => {
+  const { 
+    document, 
+    status, 
+    selectDetail, 
+    approvedDetails, 
+    approveMultipleDetails, 
+    approveAllDetails,
+    cancelMultipleApprovals
+  } = useDocumentStore();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedDetails, setSelectedDetails] = useState<Set<string>>(new Set());
+  const [filter, setFilter] = useState<'all' | 'pending' | 'approved'>('all');
 
-    def init_ui(self):
-        """UI初期化"""
-        self.upload_widget = UploadWidget()
-        self.monitor_widget = MonitorWidget()
-        self.edit_widget = EditWidget()
-        self.approval_widget = ApprovalWidget()
-        self.setup_layout()
+  // フィルター適用
+  const filteredDetails = allDetails.filter(detail => {
+    switch (filter) {
+      case 'pending':
+        return !approvedDetails.has(detail.no);
+      case 'approved':
+        return approvedDetails.has(detail.no);
+      default:
+        return true;
+    }
+  });
 
-class UploadWidget(QWidget):
-    def __init__(self, parent=None):
-        """請求書PDFアップロードウィジェット"""
-        super().__init__(parent)
-        self.setup_drag_drop()
-        self.setup_progress_bar()
+  // 一括承認処理
+  const handleBulkApprove = async () => {
+    if (selectedDetails.size === 0) return;
+    await approveMultipleDetails(Array.from(selectedDetails));
+    setSelectedDetails(new Set());
+  };
 
-class MonitorWidget(QWidget):
-    def __init__(self, parent=None):
-        """処理状況モニタリングウィジェット"""
-        super().__init__(parent)
-        self.setup_status_view()
-        self.setup_error_display()
+  return (
+    <Box sx={{ mt: 4 }}>
+      <Box sx={{ mb: 2 }}>
+        {/* フィルターコントロール */}
+        <ToggleButtonGroup value={filter} exclusive onChange={handleFilterChange}>
+          <ToggleButton value="all">すべて</ToggleButton>
+          <ToggleButton value="pending">未承認のみ</ToggleButton>
+          <ToggleButton value="approved">承認済みのみ</ToggleButton>
+        </ToggleButtonGroup>
 
-class EditWidget(QWidget):
-    def __init__(self, parent=None):
-        """請求書編集ウィジェット"""
-        super().__init__(parent)
-        self.setup_pdf_viewer()
-        self.setup_data_editor()
-        self.setup_validation_display()
+        {/* 一括承認ボタン */}
+        <Button
+          startIcon={<CheckCircleIcon />}
+          variant="contained"
+          color="success"
+          onClick={handleBulkApprove}
+          disabled={selectedDetails.size === 0}
+        >
+          選択した明細を承認 ({selectedDetails.size}件)
+        </Button>
+      </Box>
+
+      {/* 明細一覧テーブル */}
+      <TableContainer>
+        <Table>
+          <TableBody>
+            {filteredDetails.map((detail) => (
+              <TableRow
+                key={detail.no}
+                selected={selectedDetails.has(detail.no)}
+                sx={{
+                  bgcolor: approvedDetails.has(detail.no) ? 'success.lighter' : 'inherit'
+                }}
+              >
+                <TableCell>
+                  <Checkbox
+                    checked={selectedDetails.has(detail.no)}
+                    onChange={handleSelect(detail.no)}
+                  />
+                </TableCell>
+                <TableCell>{/* 明細情報 */}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
+  );
+};
+
+// 明細詳細ダイアログ
+export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => {
+  const { 
+    selectedDetail, 
+    approveDetail, 
+    cancelApproval,
+    approvedDetails 
+  } = useDocumentStore();
+
+  // 承認状態の取得
+  const approvalStatus = selectedDetail ? approvedDetails.get(selectedDetail.no) : null;
+
+  // 承認処理
+  const handleApprove = async () => {
+    if (!selectedDetail) return;
+    await approveDetail(selectedDetail.no);
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose}>
+      <DialogTitle>
+        明細詳細：{selectedDetail?.no}
+        {approvalStatus && (
+          <Chip
+            icon={<CheckCircleIcon />}
+            label="承認済"
+            color="success"
+          />
+        )}
+      </DialogTitle>
+      <DialogContent>
+        {/* 明細情報表示 */}
+      </DialogContent>
+      <DialogActions>
+        {!approvalStatus ? (
+          <Button
+            startIcon={<CheckCircleIcon />}
+            onClick={handleApprove}
+            variant="contained"
+            color="success"
+          >
+            承認（Ctrl+Enter）
+          </Button>
+        ) : (
+          <Button
+            variant="outlined"
+            color="error"
+            onClick={() => {
+              cancelApproval(selectedDetail.no);
+              onClose();
+            }}
+          >
+            承認を取り消し
+          </Button>
+        )}
+        <Button onClick={onClose}>
+          閉じる
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
 ```
 
 ### 3.7 データベースモジュール

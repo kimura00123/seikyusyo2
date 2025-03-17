@@ -1,316 +1,266 @@
+from typing import Dict, Any, List
+from pydantic import BaseModel
+import logging
 import re
-from typing import List, Dict, Any, Optional
-from datetime import datetime
-from pydantic import BaseModel, Field
-from .structuring import DocumentStructure
-from utils.logger import get_logger
-
-logger = get_logger(__name__)
 
 
 class ValidationError(BaseModel):
-    """バリデーションエラー情報"""
-
-    field: str = Field(..., description="エラーが発生したフィールド")
-    message: str = Field(..., description="エラーメッセージ")
-    severity: str = Field("error", description="エラーの重要度")
-    value: Any = Field(None, description="エラーの対象値")
+    field: str
+    message: str
+    severity: str = "error"
 
 
 class ValidationResult(BaseModel):
-    """バリデーション結果"""
-
-    is_valid: bool = Field(False, description="バリデーション結果")
-    errors: List[ValidationError] = Field(
-        default_factory=list, description="エラーリスト"
-    )
-    warnings: List[ValidationError] = Field(
-        default_factory=list, description="警告リスト"
-    )
-    normalized_data: Optional[Dict] = Field(None, description="正規化されたデータ")
+    is_valid: bool
+    errors: List[ValidationError]
 
 
-class ValidationRule:
-    """バリデーションルール"""
-
-    @staticmethod
-    def validate_customer_code(code: str) -> Optional[str]:
-        """
-        顧客コードを検証する
-
-        Args:
-            code (str): 顧客コード
-
-        Returns:
-            Optional[str]: エラーメッセージ。問題なければNone
-        """
-        if not code:
-            return "顧客コードは必須です"
-        if not re.match(r"^[A-Z0-9]{4,10}$", code):
-            return "顧客コードは4-10文字の英数字である必要があります"
-        return None
-
-    @staticmethod
-    def validate_amount(amount: str) -> Optional[str]:
-        """
-        金額を検証する
-
-        Args:
-            amount (str): 金額
-
-        Returns:
-            Optional[str]: エラーメッセージ。問題なければNone
-        """
-        if not amount:
-            return "金額は必須です"
-        try:
-            # カンマと円記号を除去して数値変換
-            value = int(amount.replace(",", "").replace("¥", ""))
-            if value < 0:
-                return "金額は0以上である必要があります"
-            if value > 999999999:
-                return "金額が上限を超えています"
-        except ValueError:
-            return "金額の形式が不正です"
-        return None
-
-    @staticmethod
-    def validate_tax_rate(rate: str) -> Optional[str]:
-        """
-        税率を検証する
-
-        Args:
-            rate (str): 税率
-
-        Returns:
-            Optional[str]: エラーメッセージ。問題なければNone
-        """
-        if not rate:
-            return "税率は必須です"
-        try:
-            # %記号を除去して数値変換
-            value = float(rate.replace("%", ""))
-            if value not in [0, 8, 10]:
-                return "税率は0%, 8%, 10%のいずれかである必要があります"
-        except ValueError:
-            return "税率の形式が不正です"
-        return None
-
-    @staticmethod
-    def validate_date_range(date_range: Optional[str]) -> Optional[str]:
-        """
-        日付範囲を検証する
-
-        Args:
-            date_range (Optional[str]): 日付範囲
-
-        Returns:
-            Optional[str]: エラーメッセージ。問題なければNone
-        """
-        if not date_range:
-            return None  # 日付範囲は任意
-
-        # YYYY/MM/DD-YYYY/MM/DD 形式を期待
-        pattern = r"^\d{4}/\d{2}/\d{2}-\d{4}/\d{2}/\d{2}$"
-        if not re.match(pattern, date_range):
-            return "日付範囲の形式が不正です（YYYY/MM/DD-YYYY/MM/DD）"
-
-        try:
-            start_date, end_date = date_range.split("-")
-            start = datetime.strptime(start_date, "%Y/%m/%d")
-            end = datetime.strptime(end_date, "%Y/%m/%d")
-            if end < start:
-                return "終了日は開始日以降である必要があります"
-        except ValueError:
-            return "日付の形式が不正です"
-
-        return None
-
-
-class Validator:
-    """バリデーションエンジン"""
-
+class ValidationEngine:
     def __init__(self):
-        self.rules = ValidationRule()
-        self._validation_cache = (
-            {}
-        )  # ドキュメントIDごとのバリデーション結果をキャッシュ
+        self.rules = [
+            self._validate_required_fields,
+            self._validate_amounts,
+            self._validate_tax_rates,
+            self._validate_sequential_numbers,
+        ]
 
-    def validate(
-        self, data: DocumentStructure, document_id: Optional[str] = None
-    ) -> ValidationResult:
-        """
-        データを検証する
+    def validate_invoice(self, document: Dict[str, Any]) -> ValidationResult:
+        """請求書データのバリデーションを実行する"""
+        errors = []
 
-        Args:
-            data (DocumentStructure): 検証対象のデータ
+        for rule in self.rules:
+            rule_errors = rule(document)
+            errors.extend(rule_errors)
 
-        Returns:
-            ValidationResult: 検証結果
-        """
+        return ValidationResult(is_valid=len(errors) == 0, errors=errors)
+
+    def _validate_required_fields(
+        self, document: Dict[str, Any]
+    ) -> List[ValidationError]:
+        """必須フィールドの検証"""
+        errors = []
+
+        # ドキュメントレベルの必須フィールド
+        if not document.get("total_amount"):
+            errors.append(
+                ValidationError(field="total_amount", message="合計金額は必須です")
+            )
+
+        # 顧客情報の必須フィールド
+        for customer in document.get("customers", []):
+            if not customer.get("customer_code"):
+                errors.append(
+                    ValidationError(
+                        field="customer_code", message="取引先コードは必須です"
+                    )
+                )
+            if not customer.get("customer_name"):
+                errors.append(
+                    ValidationError(field="customer_name", message="取引先名は必須です")
+                )
+
+            # 明細行の必須フィールド
+            for entry in customer.get("entries", []):
+                if not entry.get("no"):
+                    errors.append(
+                        ValidationError(field="no", message="明細番号は必須です")
+                    )
+                if not entry.get("description"):
+                    errors.append(
+                        ValidationError(field="description", message="商品名は必須です")
+                    )
+                if not entry.get("amount"):
+                    errors.append(
+                        ValidationError(field="amount", message="金額は必須です")
+                    )
+
+        return errors
+
+    def _validate_sequential_numbers(self, document: Dict[str, Any]) -> List[ValidationError]:
+        """明細番号の連番チェック"""
+        errors = []
+        logger = logging.getLogger(__name__)
+        
+        # すべての明細番号を収集
+        all_detail_numbers = []
+        for customer in document.get("customers", []):
+            for entry in customer.get("entries", []):
+                detail_no = entry.get("no")
+                if detail_no:
+                    all_detail_numbers.append(detail_no)
+        
+        # 明細番号が存在しない場合はチェックしない
+        if not all_detail_numbers:
+            return errors
+            
+        # 明細番号から数値部分を抽出
+        number_pattern = re.compile(r'(\d+)')
+        numeric_details = []
+        
+        for detail_no in all_detail_numbers:
+            match = number_pattern.search(str(detail_no))
+            if match:
+                numeric_details.append(int(match.group(1)))
+        
+        # 数値が抽出できない場合はチェックしない
+        if not numeric_details:
+            return errors
+            
+        # 数値をソート
+        numeric_details.sort()
+        
+        # 最小値と最大値を取得
+        min_no = numeric_details[0]
+        max_no = numeric_details[-1]
+        
+        # 連番であるべき数値の範囲を生成
+        expected_range = set(range(min_no, max_no + 1))
+        actual_set = set(numeric_details)
+        
+        # 欠番を検出
+        missing_numbers = expected_range - actual_set
+        
+        if missing_numbers:
+            missing_str = ", ".join(str(num) for num in sorted(missing_numbers))
+            logger.warning(f"明細番号に欠番があります: {missing_str}")
+            errors.append(
+                ValidationError(
+                    field="detail_numbers",
+                    message=f"明細番号に欠番があります: {missing_str}",
+                    severity="warning"
+                )
+            )
+            
+        # 重複をチェック
+        duplicates = []
+        seen = set()
+        
+        for num in numeric_details:
+            if num in seen:
+                duplicates.append(num)
+            else:
+                seen.add(num)
+                
+        if duplicates:
+            duplicate_str = ", ".join(str(num) for num in sorted(set(duplicates)))
+            logger.warning(f"明細番号に重複があります: {duplicate_str}")
+            errors.append(
+                ValidationError(
+                    field="detail_numbers",
+                    message=f"明細番号に重複があります: {duplicate_str}",
+                    severity="warning"
+                )
+            )
+            
+        return errors
+
+    def _validate_amounts(self, document: Dict[str, Any]) -> List[ValidationError]:
+        """金額の整合性検証"""
+        errors = []
+        
+        # ロガーを取得
+        logger = logging.getLogger(__name__)
+
         try:
-            errors = []
-            warnings = []
+            # 合計金額を文字列に変換してからreplace処理
+            total_amount_str = str(document.get("total_amount", "0"))
+            total_amount = int(total_amount_str.replace(",", ""))
+            sum_amount = 0
+            
+            # 税率ごとの合計金額を計算するための辞書
+            tax_totals = {
+                "8%": 0,
+                "10%": 0,
+                "unknown": 0  # 税率が不明な場合
+            }
 
-            # 顧客情報の検証
-            for customer in data.customers:
-                # 顧客コードの検証
-                if error := self.rules.validate_customer_code(customer.customer_code):
+            for customer in document.get("customers", []):
+                for entry in customer.get("entries", []):
+                    try:
+                        # 明細金額を文字列に変換してからreplace処理
+                        amount_str = str(entry.get("amount", "0"))
+                        amount = int(amount_str.replace(",", ""))
+                        
+                        # 税率を取得（文字列に変換）
+                        tax_rate = entry.get("tax_rate")
+                        if tax_rate is not None:
+                            tax_rate = str(tax_rate)
+                        
+                        # 税率ごとに金額を集計
+                        if tax_rate == "8%":
+                            tax_totals["8%"] += amount
+                        elif tax_rate == "10%":
+                            tax_totals["10%"] += amount
+                        else:
+                            # デフォルトは10%と仮定
+                            tax_totals["unknown"] += amount
+                            
+                        sum_amount += amount
+                    except ValueError:
+                        errors.append(
+                            ValidationError(
+                                field="amount",
+                                message=f"金額の形式が不正です: {entry.get('amount')}",
+                                severity="error",
+                            )
+                        )
+
+            # 消費税を計算して加算
+            tax_8_percent = int(tax_totals["8%"] * 0.08 + 0.5)  # 小数点以下切り上げ
+            tax_10_percent = int(tax_totals["10%"] * 0.1 + 0.5)  # 小数点以下切り上げ
+            tax_unknown = int(tax_totals["unknown"] * 0.1 + 0.5)  # 不明な税率は10%と仮定
+            
+            # 税込み合計金額
+            sum_with_tax = sum_amount + tax_8_percent + tax_10_percent + tax_unknown
+            
+            # 計算結果をログに出力
+            logger.info(f"合計金額検証: 明細合計(税抜)={sum_amount:,}円")
+            logger.info(f"税率8%の合計: {tax_totals['8%']:,}円, 消費税: {tax_8_percent:,}円")
+            logger.info(f"税率10%の合計: {tax_totals['10%']:,}円, 消費税: {tax_10_percent:,}円")
+            logger.info(f"税率不明の合計: {tax_totals['unknown']:,}円, 消費税(10%として): {tax_unknown:,}円")
+            logger.info(f"明細合計(税込): {sum_with_tax:,}円, 合計金額: {total_amount:,}円")
+            
+            # 許容誤差（端数処理の違いによる誤差を許容）
+            tolerance = 10
+            
+            if abs(total_amount - sum_with_tax) > tolerance:
+                errors.append(
+                    ValidationError(
+                        field="total_amount",
+                        message=f"合計金額が一致しません（明細合計(税込): {sum_with_tax:,}円, 合計金額: {total_amount:,}円）",
+                        severity="warning",
+                    )
+                )
+
+        except ValueError:
+            errors.append(
+                ValidationError(
+                    field="total_amount",
+                    message=f"合計金額の形式が不正です: {document.get('total_amount')}",
+                    severity="error",
+                )
+            )
+
+        return errors
+
+    def _validate_tax_rates(self, document: Dict[str, Any]) -> List[ValidationError]:
+        """税率の検証"""
+        errors = []
+        valid_rates = ["8%", "10%"]
+
+        for customer in document.get("customers", []):
+            for entry in customer.get("entries", []):
+                tax_rate = entry.get("tax_rate")
+                # tax_rateを文字列に変換
+                if tax_rate is not None:
+                    tax_rate = str(tax_rate)
+                if tax_rate and tax_rate not in valid_rates:
                     errors.append(
                         ValidationError(
-                            field=f"customer_code",
-                            message=error,
-                            value=customer.customer_code,
+                            field="tax_rate",
+                            message=f"不正な税率です: {tax_rate}（有効な税率: {', '.join(valid_rates)}）",
+                            severity="warning",
                         )
                     )
 
-                # 明細行の検証
-                for entry in customer.entries:
-                    # 金額の検証
-                    if error := self.rules.validate_amount(entry.amount):
-                        errors.append(
-                            ValidationError(
-                                field=f"amount", message=error, value=entry.amount
-                            )
-                        )
-
-                    # 税率の検証
-                    if error := self.rules.validate_tax_rate(entry.tax_rate):
-                        errors.append(
-                            ValidationError(
-                                field=f"tax_rate", message=error, value=entry.tax_rate
-                            )
-                        )
-
-                    # 日付範囲の検証
-                    if error := self.rules.validate_date_range(entry.date_range):
-                        warnings.append(
-                            ValidationError(
-                                field=f"date_range",
-                                message=error,
-                                severity="warning",
-                                value=entry.date_range,
-                            )
-                        )
-
-            # 正規化データの作成
-            normalized_data = self._normalize_data(data)
-
-            # 結果の作成
-            result = ValidationResult(
-                is_valid=len(errors) == 0,
-                errors=errors,
-                warnings=warnings,
-                normalized_data=(
-                    normalized_data.model_dump() if normalized_data else None
-                ),
-            )
-
-            # ログ出力
-            if result.is_valid:
-                logger.info("バリデーション成功")
-            else:
-                logger.warning(
-                    f"バリデーションエラー: {len(errors)}件のエラー, {len(warnings)}件の警告"
-                )
-
-            # バリデーション結果をキャッシュ
-            if document_id:
-                self._validation_cache[document_id] = result
-                logger.info(f"バリデーション結果をキャッシュ: {document_id}")
-
-            return result
-
-        except Exception as e:
-            logger.error(f"バリデーションでエラー: {e}", exc_info=True)
-            raise
-
-    def get_validation_result(self, document_id: str) -> Optional[Dict]:
-        """
-        キャッシュされたバリデーション結果を取得する
-
-        Args:
-            document_id (str): ドキュメントID
-
-        Returns:
-            Optional[Dict]: バリデーション結果。存在しない場合はNone
-        """
-        try:
-            if document_id in self._validation_cache:
-                result = self._validation_cache[document_id]
-                return {
-                    "is_valid": result.is_valid,
-                    "errors": [
-                        {"field": e.field, "message": e.message} for e in result.errors
-                    ],
-                    "warnings": [
-                        {"field": w.field, "message": w.message}
-                        for w in result.warnings
-                    ],
-                }
-            return None
-
-        except Exception as e:
-            logger.error(f"バリデーション結果の取得でエラー: {e}", exc_info=True)
-            raise
-
-    def _normalize_data(self, data: DocumentStructure) -> DocumentStructure:
-        """
-        データを正規化する
-
-        Args:
-            data (DocumentStructure): 正規化対象のデータ
-
-        Returns:
-            DocumentStructure: 正規化されたデータ
-        """
-        try:
-            # 新しいインスタンスを作成して変更を適用
-            normalized = data.copy(deep=True)
-
-            for customer in normalized.customers:
-                for entry in customer.entries:
-                    # 金額の正規化（カンマと円記号を除去）
-                    entry.amount = entry.amount.replace(",", "").replace("¥", "")
-
-                    # 税率の正規化（%記号を除去）
-                    entry.tax_rate = entry.tax_rate.replace("%", "")
-
-                    # 日付範囲の正規化（形式の統一）
-                    if entry.date_range:
-                        try:
-                            start, end = entry.date_range.split("-")
-                            start_date = datetime.strptime(start, "%Y/%m/%d")
-                            end_date = datetime.strptime(end, "%Y/%m/%d")
-                            entry.date_range = (
-                                f"{start_date.strftime('%Y/%m/%d')}-"
-                                f"{end_date.strftime('%Y/%m/%d')}"
-                            )
-                        except ValueError:
-                            # 日付の解析に失敗した場合は元の値を維持
-                            pass
-
-            return normalized
-
-        except Exception as e:
-            logger.error(f"データの正規化でエラー: {e}", exc_info=True)
-            raise
-
-
-# 使用例:
-"""
-validator = Validator()
-
-# バリデーション実行
-result = validator.validate(document_data)
-
-if result.is_valid:
-    # 正規化されたデータを使用
-    normalized_data = result.normalized_data
-else:
-    # エラーを処理
-    for error in result.errors:
-        print(f"エラー: {error.field} - {error.message}")
-    for warning in result.warnings:
-        print(f"警告: {warning.field} - {warning.message}")
-"""
+        return errors

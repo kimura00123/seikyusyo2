@@ -1,290 +1,266 @@
-import json
-import logging
-from typing import Dict, List, Optional
-from pydantic import BaseModel, Field
-from datetime import datetime
-from utils.logger import get_logger
-from utils.config import settings
-from core.pdf_parser import TextElement
+import os
+import re
+from typing import Dict, List, Any, Optional
+from pydantic import BaseModel
+from src.utils.config import get_settings
+from src.core.image_processor import ImageProcessor
+from src.utils.temp_manager import temp_manager
+from src.utils.logger import get_logger
+from src.utils.text_processing import preprocess_text_for_detail_numbers, is_detail_number
 
 logger = get_logger(__name__)
 
 
 class StockInfo(BaseModel):
-    """在庫情報"""
-
-    carryover: Optional[int] = Field(None, description="繰越在庫")
-    incoming: Optional[int] = Field(None, description="入庫数")
-    w_value: Optional[int] = Field(None, description="W値")
-    outgoing: Optional[int] = Field(None, description="出庫数")
-    remaining: Optional[int] = Field(None, description="在庫残高")
-    total: Optional[int] = Field(None, description="合計")
-    unit_price: Optional[int] = Field(None, description="単価")
+    carryover: int
+    incoming: int
+    w_value: int
+    outgoing: int
+    remaining: int
+    total: int
+    unit_price: int
 
 
 class QuantityInfo(BaseModel):
-    """数量情報"""
-
-    quantity: Optional[int] = Field(None, description="数量")
-    unit_price: Optional[int] = Field(None, description="単価")
+    quantity: int
+    unit_price: Optional[int] = None
 
 
 class EntryDetail(BaseModel):
-    """明細行情報"""
-
-    no: str = Field(..., description="明細番号")
-    description: str = Field(..., description="摘要")
-    tax_rate: str = Field(..., description="税率")
-    amount: str = Field(..., description="金額")
-    stock_info: Optional[StockInfo] = Field(None, description="在庫情報")
-    quantity_info: Optional[QuantityInfo] = Field(None, description="数量情報")
-    date_range: Optional[str] = Field(None, description="日付範囲")
-    page_no: int = Field(..., description="ページ番号")
+    no: str
+    description: str
+    tax_rate: str
+    amount: int
+    stock_info: Optional[StockInfo] = None
+    quantity_info: Optional[QuantityInfo] = None
+    date_range: Optional[str] = None
+    page_no: int
 
 
 class CustomerEntry(BaseModel):
-    """顧客情報"""
-
-    customer_code: str = Field(..., description="顧客コード")
-    customer_name: str = Field(..., description="顧客名")
-    department: Optional[str] = Field(None, description="部署名")
-    box_number: Optional[str] = Field(None, description="文書箱番号")
-    entries: List[EntryDetail] = Field(default_factory=list, description="明細行リスト")
+    customer_code: str
+    customer_name: str
+    department: str
+    box_number: str
+    entries: List[EntryDetail]
 
 
 class DocumentStructure(BaseModel):
-    """請求書全体の構造"""
-
-    pdf_filename: str = Field(..., description="PDFファイル名")
-    total_amount: str = Field(..., description="合計金額")
-    customers: List[CustomerEntry] = Field(
-        default_factory=list, description="顧客情報リスト"
-    )
+    pdf_filename: str
+    total_amount: int
+    customers: List[CustomerEntry]
 
 
 class StructuringEngine:
-    """テキストを構造化するエンジン"""
+    def __init__(self, pdf_path: str, task_id: str):
+        """構造化エンジンの初期化"""
+        from openai import AzureOpenAI
+        from src.utils.config import get_settings
 
-    def __init__(self):
-        # Azure OpenAI APIの設定
-        self.api_key = settings.AZURE_OPENAI_API_KEY
-        self.endpoint = settings.AZURE_OPENAI_ENDPOINT
-        self.api_version = settings.AZURE_OPENAI_API_VERSION
-        self.deployment_name = settings.AZURE_OPENAI_DEPLOYMENT_NAME
+        self.pdf_path = pdf_path
+        self.task_id = task_id
+        self.client = AzureOpenAI(
+            api_key=get_settings().AZURE_OPENAI_API_KEY,
+            api_version=get_settings().AZURE_OPENAI_API_VERSION,
+            azure_endpoint=get_settings().AZURE_OPENAI_ENDPOINT,
+        )
 
-    async def structure_invoice(
-        self, text_elements: Dict[int, List[TextElement]]
+    def _preprocess_text_for_llm(self, text: str) -> str:
+        """
+        LLMに渡す前にテキストを前処理する
+        特定の文字列を削除または置換する
+        
+        Args:
+            text: 前処理するテキスト
+            
+        Returns:
+            前処理されたテキスト
+        """
+        # 削除または置換する文字列のリスト
+        # 将来的に他の文字列も追加できるようにリストで管理
+        replacements = [
+            ("（単体）", ""),  # 全角括弧の「単体」を削除
+            ("(単体)", ""),    # 半角括弧の「単体」を削除
+            
+        ]
+        
+        # 各置換処理を適用
+        processed_text = text
+        for target, replacement in replacements:
+            processed_text = processed_text.replace(target, replacement)
+        
+        logger.debug(f"テキスト前処理を実行: {len(replacements)}個の置換パターンを適用")
+        return processed_text
+
+    def structure_invoice(
+        self, text_content: str
     ) -> DocumentStructure:
-        """
-        請求書のテキストを構造化する
+        """テキスト要素を構造化データに変換する（改善版）"""
+        # テキストを前処理
+        text = self._preprocess_text_for_llm(text_content)
 
-        Args:
-            text_elements (Dict[int, List[TextElement]]): ページ毎のテキスト要素リスト
+        # オリジナルのファイル名を取得
+        pdf_filename = temp_manager.get_original_filename(self.task_id)
 
-        Returns:
-            DocumentStructure: 構造化されたデータ
-        """
+        # Azure OpenAI APIにプロンプトを送信
         try:
-            # テキスト要素の前処理
-            processed_text = self._preprocess_text(text_elements)
+            system_prompt = f"""
+    請求書のテキストから顧客情報と明細を抽出し、構造化データとして出力してください。
+    対象のPDFファイル名は "{pdf_filename}" です。
+    以下の重要な処理ルールに従ってください：
 
-            # Azure OpenAI APIを使用して構造化
-            structured_data = await self._call_openai_api(processed_text)
+    0. 文書全体の情報抽出：
+       - 文書全体のPDFファイル名："{pdf_filename}" を使用
+       - 文書全体の請求合計額：「ご請求合計額」の後に続く金額（例：¥682,559）を抽出
+       - これらの情報はDocumentStructureレベルで保持する
 
-            # 構造化データの検証
-            result = DocumentStructure.parse_obj(structured_data)
-            logger.info("構造化処理が完了")
-            return result
+    1. 改ページ処理の考慮：
+       - 各ページにはヘッダー情報（寺田倉庫株式会社、住所等）が含まれる可能性がある
+       - ページをまたぐ顧客情報は、同じ顧客コードと文書箱番号で関連付けを行う
+       - ヘッダー情報を含む行は無視し、実際の明細データのみを抽出
+       - ヘッダー情報（寺田倉庫株式会社...）の出現でページ番号をインクリメント
+       - 各明細のpage_noフィールドに、その明細が出現したページ番号を記録
 
-        except Exception as e:
-            logger.error(f"構造化処理でエラー: {e}", exc_info=True)
-            raise
+    2. 顧客情報の継続性：
+       - 顧客コード（例：F034）が出現した後、次の顧客コードが出現するまでの全ての明細はその顧客に属する
+       - 改ページによってヘッダーが挿入されても、顧客情報の連続性は維持する
+       - 前のページの顧客に関する明細は、ヘッダーをまたいでも同じ顧客の明細として処理する
 
-    def _preprocess_text(self, text_elements: Dict[int, List[TextElement]]) -> str:
-        """
-        テキスト要素を前処理する
+    3. 明細の抽出ルール：
+       - 明細番号（No）は連続性を保つ
+       - 同じ会社名が複数回出現する場合でも、それぞれを別の明細として正確に抽出する
+       - 明細の基本情報（明細番号、摘要、消費税率、金額）を抽出
+       - 各明細に関連する追加情報（日付範囲、在庫情報、数量情報）も漏れなく抽出
+       - 明細行の後に続く補足情報（時間指定なし、配送先住所等）は適切に処理
+       - 各明細にページ番号（page_no）を付与
 
-        Args:
-            text_elements (Dict[int, List[TextElement]]): ページ毎のテキスト要素リスト
+    4. データ形式：
+       - 顧客コード: 'F'で始まる形式で抽出 (例: F034)
+       - 会社名と部署:
+            - 会社名は「株式会社」「㈱」で終わる部分
+            - 残りを部署として扱う
+       - 金額: 数値のみを抽出（¥記号やカンマは除去）
+       - 数量: 数値のみを抽出（カンマは除去）
+       - 日付: 元の形式を保持 (例: 2024/08月分(2024/08/01 - 2024/08/31))
+       - 数量情報と在庫情報は別々のオブジェクトとして管理
 
-        Returns:
-            str: 前処理済みのテキスト
-        """
-        processed_text = []
+    処理の注意点：
+    - ヘッダー情報（"寺田倉庫株式会社"や住所情報など）は無視する
+    - テーブルのカラムヘッダー行（|No|摘 要|消費税率|金 額|）は無視する
+    - 改ページマーカー（-----）は無視する
+    - 同じ顧客の明細は、ページをまたいでも一つの配列にまとめる
 
-        for page_num, elements in sorted(text_elements.items()):
-            # ページ区切りの追加
-            if processed_text:
-                processed_text.append("\n=== ページ区切り ===\n")
+    特に重要:
+    - 金額や数量の値は必ず数値のみを抽出する。¥記号やカンマ(,)など、数字以外の文字は全て取り除くこと。
+    - 例: "¥1,234" → 1234, "10,000個" → 10000
+    """
 
-            # テキスト要素の追加（位置情報付き）
-            for element in elements:
-                text = element.text.strip()
-                if text:
-                    position = f"[x:{element.x0:.1f},y:{element.y0:.1f}]"
-                    font_info = ""
-                    if element.font_name or element.font_size:
-                        font_info = (
-                            f"[font:{element.font_name},size:{element.font_size:.1f}]"
-                        )
-                    processed_text.append(f"{position}{font_info} {text}")
+            from src.utils.config import get_settings
 
-        return "\n".join(processed_text)
-
-    async def _call_openai_api(self, text: str) -> Dict:
-        """
-        Azure OpenAI APIを呼び出して構造化を実行する
-
-        Args:
-            text (str): 構造化対象のテキスト
-
-        Returns:
-            Dict: 構造化されたデータ
-        """
-        from openai import AsyncAzureOpenAI
-
-        try:
-            client = AsyncAzureOpenAI(
-                api_key=self.api_key,
-                api_version=self.api_version,
-                azure_endpoint=self.endpoint,
-            )
-
-            # プロンプトの構築
-            prompt = self._build_prompt(text)
-
-            # APIの呼び出しとレスポンスの取得
-            completion = await client.beta.chat.completions.parse(
-                model=self.deployment_name,
+            completion = self.client.beta.chat.completions.parse(
+                model=get_settings().AZURE_OPENAI_DEPLOYMENT_NAME,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": """
-請求書のテキストから顧客情報と明細を抽出し、構造化データとして出力してください。
-対象のPDFファイル名は "{pdf_filename}" です。
-以下の重要な処理ルールに従ってください：
-
-0. 文書全体の情報抽出：
-   - 文書全体のPDFファイル名："{pdf_filename}" を使用
-   - 文書全体の請求合計額：「ご請求合計額」の後に続く金額（例：¥682,559）を抽出
-   - これらの情報はDocumentStructureレベルで保持する
-
-1. 改ページ処理の考慮：
-   - 各ページにはヘッダー情報（寺田倉庫株式会社、住所等）が含まれる可能性がある
-   - ページをまたぐ顧客情報は、同じ顧客コードと文書箱番号で関連付けを行う
-   - ヘッダー情報を含む行は無視し、実際の明細データのみを抽出
-   - ヘッダー情報（寺田倉庫株式会社...）の出現でページ番号をインクリメント
-   - 各明細のpage_noフィールドに、その明細が出現したページ番号を記録
-
-2. 顧客情報の継続性：
-   - 顧客コード（例：F034）が出現した後、次の顧客コードが出現するまでの全ての明細はその顧客に属する
-   - 改ページによってヘッダーが挿入されても、顧客情報の連続性は維持する
-   - 前のページの顧客に関する明細は、ヘッダーをまたいでも同じ顧客の明細として処理する
-
-
-3. 明細の抽出ルール：
-   - 明細番号（No）は連続性を保つ
-   - 明細の基本情報（明細番号、摘要、消費税率、金額）を抽出
-   - 各明細に関連する追加情報（日付範囲、在庫情報、数量情報）も漏れなく抽出
-   - 明細行の後に続く補足情報（時間指定なし、配送先住所等）は適切に処理
-   - 各明細にページ番号（page_no）を付与
-
-4. データ形式：
-   - 顧客コード: 'F'で始まる形式で抽出 (例: F034)
-   - 会社名と部署:
-    - 会社名は「株式会社」「㈱」で終わる部分
-    - 残りを部署として扱う
-   - 金額: ¥マークを付けて表示
-   - 日付: 元の形式を保持 (例: 2024/08月分(2024/08/01 - 2024/08/31))
-   - 数量情報と在庫情報は別々のオブジェクトとして管理
-
-処理の注意点：
-- ヘッダー情報（"寺田倉庫株式会社"や住所情報など）は無視する
-- テーブルのカラムヘッダー行（|No|摘 要|消費税率|金 額|）は無視する
-- 改ページマーカー（-----）は無視する
-- 同じ顧客の明細は、ページをまたいでも一つの配列にまとめる
-""",
-                    },
-                    {"role": "user", "content": prompt},
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": text},
                 ],
                 response_format=DocumentStructure,
             )
 
-            logger.info("APIレスポンスを受信")
-            return completion.choices[0].message.parsed
-
+            document = completion.choices[0].message.parsed
+            
+            # 構造化データの後処理（数値の整形）
+            # document = self._post_process_document(document)
+            
+            # 構造化完了後、明細画像を抽出
+            self._extract_detail_images(document)
+            
+            return document
         except Exception as e:
-            logger.error(f"OpenAI APIの呼び出しでエラー: {e}", exc_info=True)
+            from src.utils.logger import get_logger
+
+            logger = get_logger(__name__)
+            logger.error(f"構造化データの変換に失敗: {e}")
             raise
 
-    def _build_prompt(self, text: str) -> str:
-        """
-        プロンプトを構築する
+    def _post_process_document(self, document: DocumentStructure) -> DocumentStructure:
+        """構造化データの後処理を行う"""
+        def clean_numeric_value(value: Any) -> int:
+            """金額や数量の文字列から数値のみを抽出する"""
+            if value is None:
+                return 0
+                
+            if isinstance(value, int):
+                return value
+                
+            if not isinstance(value, str):
+                try:
+                    return int(value)
+                except (ValueError, TypeError):
+                    return 0
+                    
+            # ¥記号、カンマ、空白などを削除
+            clean_value = re.sub(r'[¥,\s]', '', value)
+            # 数値のみを抽出
+            match = re.search(r'\d+', clean_value)
+            if match:
+                return int(match.group())
+            return 0
+        
+        # 全体の合計金額を数値に変換
+        document.total_amount = clean_numeric_value(document.total_amount)
+        
+        for customer in document.customers:
+            for entry in customer.entries:
+                # 金額を数値に変換
+                entry.amount = clean_numeric_value(entry.amount)
+                
+                # 在庫情報がある場合は各フィールドを数値に変換
+                if entry.stock_info:
+                    entry.stock_info.carryover = clean_numeric_value(entry.stock_info.carryover)
+                    entry.stock_info.incoming = clean_numeric_value(entry.stock_info.incoming)
+                    entry.stock_info.w_value = clean_numeric_value(entry.stock_info.w_value)
+                    entry.stock_info.outgoing = clean_numeric_value(entry.stock_info.outgoing)
+                    entry.stock_info.remaining = clean_numeric_value(entry.stock_info.remaining)
+                    entry.stock_info.total = clean_numeric_value(entry.stock_info.total)
+                    entry.stock_info.unit_price = clean_numeric_value(entry.stock_info.unit_price)
+                
+                # 数量情報がある場合は各フィールドを数値に変換
+                if entry.quantity_info:
+                    entry.quantity_info.quantity = clean_numeric_value(entry.quantity_info.quantity)
+                    if entry.quantity_info.unit_price is not None:
+                        entry.quantity_info.unit_price = clean_numeric_value(entry.quantity_info.unit_price)
+        
+        return document
 
-        Args:
-            text (str): 構造化対象のテキスト
+    def _extract_detail_images(self, document: DocumentStructure) -> None:
+        """構造化データから明細画像を抽出する"""
+        try:
+            processor = ImageProcessor()
+            try:
+                # 全明細の位置情報を一度だけ抽出
+                regions = processor.extract_detail_regions(self.pdf_path)
+                
+                # 各明細の画像を抽出して保存
+                for customer in document.customers:
+                    for entry in customer.entries:
+                        image_path = temp_manager.get_image_path(self.task_id, entry.no)
+                        if not os.path.exists(image_path):
+                            region = next(
+                                (r for r in regions if r.no == entry.no),
+                                None
+                            )
+                            if region:
+                                processor.extract_single_detail_image(
+                                    self.pdf_path,
+                                    region,
+                                    image_path
+                                )
+                            else:
+                                logger.warning(f"明細番号 {entry.no} の位置情報が見つかりません")
+            finally:
+                # 必ずキャッシュをクリーンアップ
+                processor.cleanup()
 
-        Returns:
-            str: 構築されたプロンプト
-        """
-        return f"""
-以下の請求書テキストをJSON形式に構造化してください。
-
-テキスト:
-{text}
-
-出力形式:
-{{
-    "pdf_filename": "ファイル名",
-    "total_amount": "合計金額",
-    "customers": [
-        {{
-            "customer_code": "顧客コード",
-            "customer_name": "顧客名",
-            "department": "部署名",
-            "box_number": "文書箱番号",
-            "entries": [
-                {{
-                    "no": "明細番号",
-                    "description": "摘要",
-                    "tax_rate": "税率",
-                    "amount": "金額",
-                    "stock_info": {{
-                        "carryover": null,
-                        "incoming": null,
-                        "w_value": null,
-                        "outgoing": null,
-                        "remaining": null,
-                        "total": null,
-                        "unit_price": null
-                    }},
-                    "quantity_info": {{
-                        "quantity": null,
-                        "unit_price": null
-                    }},
-                    "date_range": "日付範囲",
-                    "page_no": 1
-                }}
-            ]
-        }}
-    ]
-}}
-
-注意事項:
-1. 位置情報とフォント情報は構造化の参考にしてください
-2. 数値は文字列として出力してください
-3. 日付は YYYY/MM/DD 形式で出力してください
-4. 在庫情報と数量情報は該当する場合のみ出力してください
-"""
-
-
-# 使用例:
-"""
-engine = StructuringEngine()
-
-# 構造化処理
-structured_data = await engine.structure_invoice(text_elements)
-
-# 結果の確認
-print(json.dumps(structured_data.dict(), indent=2, ensure_ascii=False))
-"""
+        except Exception as e:
+            logger.error(f"明細画像の抽出に失敗: {e}")
+            raise
