@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -31,13 +31,14 @@ import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
+import FitScreenIcon from '@mui/icons-material/FitScreen';
 import { useDocumentStore } from '../store/documentStore';
 import { documentApi, DetailWithCustomer, StockInfo, QuantityInfo } from '../services/api';
 
 // スタイル付きコンポーネント
 const ImageContainer = styled('div')({
   width: '100%',
-  height: '200px',  // 画像表示エリアの高さを調整
+  height: '250px',  // 200px から 250px (1.25倍) に変更
   overflow: 'auto',
   display: 'flex',
   alignItems: 'center',
@@ -145,9 +146,14 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [minZoom, setMinZoom] = useState(0.1); // 最小ズームレベルを動的に設定するためのステート
   const [editMode, setEditMode] = useState(false);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editedValue, setEditedValue] = useState('');
+
+  // 参照の追加
+  const imageRef = useRef<HTMLImageElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // 画像の読み込み
   useEffect(() => {
@@ -194,15 +200,50 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
 
   // ズーム操作
   const handleZoomIn = () => {
-    setZoom(prev => Math.min(prev * 1.2, 3));
+    setZoom(prev => Math.min(prev + 0.1, 3));
   };
 
+  // 最小ズームレベルを考慮したズームアウト
   const handleZoomOut = () => {
-    setZoom(prev => Math.max(prev * 0.8, 0.5));
+    setZoom(prev => Math.max(prev - 0.1, minZoom));
   };
 
   const handleResetZoom = () => {
     setZoom(1);
+  };
+
+  // 全体表示機能の追加
+  const handleFitToView = () => {
+    if (imageRef.current && containerRef.current) {
+      const img = imageRef.current;
+      const container = containerRef.current;
+      
+      // 縦横比を考慮して、表示領域に収まる最大の縮小率を計算
+      const scaleX = container.clientWidth / img.naturalWidth;
+      const scaleY = container.clientHeight / img.naturalHeight;
+      const scale = Math.min(scaleX, scaleY, 1); // 拡大はしない（最大1倍）
+      
+      setZoom(scale);
+    }
+  };
+  
+  // 画像ロード完了時のハンドラ
+  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.target as HTMLImageElement;
+    if (containerRef.current) {
+      const container = containerRef.current;
+      
+      // 画像が表示領域より大きい場合、適切な縮小率を計算
+      const scaleX = container.clientWidth / img.naturalWidth;
+      const scaleY = container.clientHeight / img.naturalHeight;
+      const scale = Math.min(scaleX, scaleY, 1); // 拡大はしない（最大1倍）
+      
+      // 最小ズームレベルを設定（ただし0.01未満にはしない）
+      setMinZoom(Math.max(0.01, scale));
+      
+      // 自動的に全体表示する
+      setZoom(scale);
+    }
   };
 
   // ホイールイベントでのズーム
@@ -417,28 +458,43 @@ export const DetailDialog: React.FC<DetailDialogProps> = ({ open, onClose }) => 
             <Typography variant="subtitle1" gutterBottom>
               明細画像
             </Typography>
-            <ImageContainer onWheel={handleWheel}>
+            <ImageContainer ref={containerRef} onWheel={handleWheel}>
               <ZoomControls>
-                <IconButton onClick={handleZoomIn} size="small">
-                  <ZoomInIcon />
-                </IconButton>
-                <IconButton onClick={handleZoomOut} size="small">
-                  <ZoomOutIcon />
-                </IconButton>
-                <IconButton onClick={handleResetZoom} size="small">
-                  <RestartAltIcon />
-                </IconButton>
+                <Tooltip title="拡大">
+                  <IconButton onClick={handleZoomIn} size="small">
+                    <ZoomInIcon />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="縮小">
+                  <IconButton onClick={handleZoomOut} size="small">
+                    <ZoomOutIcon />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="リセット">
+                  <IconButton onClick={handleResetZoom} size="small">
+                    <RestartAltIcon />
+                  </IconButton>
+                </Tooltip>
+                {/* 全体表示ボタンの追加 */}
+                <Tooltip title="全体表示">
+                  <IconButton onClick={handleFitToView} size="small">
+                    <FitScreenIcon />
+                  </IconButton>
+                </Tooltip>
               </ZoomControls>
+              
               {loading ? (
                 <CircularProgress />
               ) : imageUrl ? (
                 <StyledImage
+                  ref={imageRef}
                   src={imageUrl}
                   alt="明細画像"
                   style={{
                     transform: `scale(${zoom})`,
                     cursor: zoom !== 1 ? 'move' : 'default',
                   }}
+                  onLoad={handleImageLoad}
                 />
               ) : (
                 <Typography color="text.secondary">

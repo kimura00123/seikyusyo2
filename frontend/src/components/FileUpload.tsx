@@ -4,13 +4,17 @@ import { useDropzone } from 'react-dropzone';
 import { useDocumentStore } from '../store/documentStore';
 
 export const FileUpload: React.FC = () => {
-  const { status, uploadDocument } = useDocumentStore();
+  const { status, uploadDocument, reset, approvedDetails } = useDocumentStore();
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
+      // ファイルアップロード前に状態をリセット
+      reset();
+      
+      // ファイルをアップロード
       uploadDocument(acceptedFiles[0]);
     }
-  }, [uploadDocument]);
+  }, [uploadDocument, reset]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

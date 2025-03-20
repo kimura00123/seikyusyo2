@@ -22,6 +22,7 @@ class ValidationEngine:
             self._validate_amounts,
             self._validate_tax_rates,
             self._validate_sequential_numbers,
+            self._validate_customer_code_diversity,
         ]
 
     def validate_invoice(self, document: Dict[str, Any]) -> ValidationResult:
@@ -263,4 +264,37 @@ class ValidationEngine:
                         )
                     )
 
+        return errors
+
+    def _validate_customer_code_diversity(self, document: Dict[str, Any]) -> List[ValidationError]:
+        """顧客コードの多様性検証（全て同じ顧客コードの場合はエラー）"""
+        errors = []
+        logger = logging.getLogger(__name__)
+        
+        # すべての顧客コードを収集
+        customer_codes = []
+        for customer in document.get("customers", []):
+            customer_code = customer.get("customer_code")
+            if customer_code:
+                customer_codes.append(customer_code)
+        
+        # 顧客コードが存在しない場合はチェックしない
+        if not customer_codes:
+            return errors
+            
+        # ユニークな顧客コードの数を確認
+        unique_codes = set(customer_codes)
+        
+        # 顧客コードが1種類しかない場合はエラー
+        if len(unique_codes) == 1 and len(customer_codes) > 1:
+            code = next(iter(unique_codes))
+            logger.warning(f"すべての明細行で同じ顧客コード '{code}' が使用されています")
+            errors.append(
+                ValidationError(
+                    field="customer_code",
+                    message=f"すべての明細行で同じ顧客コード '{code}' が使用されています。複数の取引先がある場合は、それぞれ異なる顧客コードを設定してください。",
+                    severity="error"
+                )
+            )
+            
         return errors
