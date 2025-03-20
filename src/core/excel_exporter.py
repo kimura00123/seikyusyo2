@@ -156,21 +156,11 @@ class ExcelExporter:
 
                 row += 1
 
-        # テーブルの定義
-        table_range = f"A1:{get_column_letter(len(self.headers))}{row-1}"
-        table = Table(displayName="InvoiceTable", ref=table_range)
-        
-        # テーブルスタイルの設定
-        style = TableStyleInfo(
-            name="TableStyleMedium2", showFirstColumn=False,
-            showLastColumn=False, showRowStripes=True, showColumnStripes=False
-        )
-        table.tableStyleInfo = style
-        
-        # テーブルをシートに追加
-        self.sheet.add_table(table)
+        # テーブル定義を削除
+        # 代わりにオートフィルタのみを適用
+        self.sheet.auto_filter.ref = f"A1:{get_column_letter(len(self.headers))}{row-1}"
 
-        # サンプルのフィルタ表示用名前付き範囲を定義
+        # 名前付き範囲を定義（最小限のみ）
         self._create_named_ranges()
         
         # フィルタ用補助シートを追加
@@ -196,34 +186,21 @@ class ExcelExporter:
         self.workbook.save(output_path)
 
     def _create_named_ranges(self):
-        """XLOOKUPで使いやすいように名前付き範囲を定義"""
-        # 全体のデータ範囲
+        """基本的な名前付き範囲を定義"""
+        # 全体のデータ範囲のみ定義（FILTER関数を使用しない）
         self.workbook.create_named_range(
             "AllData", 
             self.sheet, 
             f"$A$1:${get_column_letter(len(self.headers))}${self.sheet.max_row}"
         )
         
-        # 保管データ用の名前付き範囲
+        # 全体のデータ範囲のみ定義
         self.workbook.create_named_range(
-            "StorageData", 
+            "AllData", 
             self.sheet, 
-            f'=FILTER(InvoiceTable, InvoiceTable[業務区分]="保管")'
+            f"$A$1:${get_column_letter(len(self.headers))}${self.sheet.max_row}"
         )
-        
-        # 荷役データ用の名前付き範囲
-        self.workbook.create_named_range(
-            "HandlingData", 
-            self.sheet, 
-            f'=FILTER(InvoiceTable, InvoiceTable[業務区分]="荷役")'
-        )
-        
-        # 運搬データ用の名前付き範囲
-        self.workbook.create_named_range(
-            "TransportData", 
-            self.sheet, 
-            f'=FILTER(InvoiceTable, InvoiceTable[業務区分]="運搬")'
-        )
+        # その他の名前付き範囲は削除
 
     def _add_helper_sheet(self):
         """フィルタ補助シートを追加"""
