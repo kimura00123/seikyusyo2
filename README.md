@@ -54,7 +54,7 @@ takatuski/
 │   ├── core/            # コアロジック
 │   ├── models/          # データモデル
 │   └── utils/           # ユーティリティ
-├── invoice-system/      # フロントエンド
+├── frontend/      # フロントエンド
 └── tests/              # テストコード
     ├── unit/           # ユニットテスト
     ├── integration/    # 統合テスト
