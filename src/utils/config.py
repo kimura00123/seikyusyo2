@@ -42,9 +42,19 @@ class Settings(BaseSettings):
     )
 
     # CosmosDB設定
-    COSMOS_DB_CONNECTION_STRING: Optional[str] = None
-    COSMOS_DB_DATABASE_NAME: Optional[str] = None
-    COSMOS_DB_CONTAINER_NAME: Optional[str] = None
+
+    COSMOS_DB_URI: Optional[str] = Field(
+        default_factory=lambda: os.getenv("COSMOS_DB_URI")
+    )
+    COSMOS_DB_KEY: Optional[str] = Field(
+        default_factory=lambda: os.getenv("COSMOS_DB_KEY")
+    )
+    COSMOS_DB_DATABASE_NAME: Optional[str] = Field(
+        default_factory=lambda: os.getenv("COSMOS_DB_DATABASE_NAME")
+    )
+    COSMOS_DB_CONTAINER_NAME: Optional[str] = Field(
+        default_factory=lambda: os.getenv("COSMOS_DB_CONTAINER_NAME")
+    )
 
     # 画像処理設定
     IMAGE_DPI: int = Field(default_factory=lambda: int(os.getenv("IMAGE_DPI", "200")))
@@ -90,7 +100,8 @@ class Settings(BaseSettings):
             "AZURE_OPENAI_API_KEY",
             "AZURE_OPENAI_ENDPOINT",
             "AZURE_OPENAI_DEPLOYMENT_NAME",
-            "COSMOS_DB_CONNECTION_STRING",
+            "COSMOS_DB_URI",
+            "COSMOS_DB_KEY",
             "COSMOS_DB_DATABASE_NAME",
             "COSMOS_DB_CONTAINER_NAME",
         ]

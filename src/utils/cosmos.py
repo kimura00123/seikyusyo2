@@ -8,6 +8,7 @@ from azure.cosmos.exceptions import CosmosResourceNotFoundError
 
 from src.models.approval import ApprovalStatus, ApprovalHistory
 from src.utils.logger import get_logger
+from src.utils.config import get_settings
 
 logger = get_logger(__name__)
 
@@ -16,11 +17,12 @@ class CosmosDBClient:
     """CosmosDBクライアント"""
 
     def __init__(self):
-        # 環境変数から設定を読み込み
-        uri = os.getenv("COSMOS_DB_URI")
-        key = os.getenv("COSMOS_DB_KEY")
-        database_name = os.getenv("COSMOS_DB_DATABASE_NAME")
-        container_name = os.getenv("COSMOS_DB_CONTAINER_NAME")
+        # 設定クラスから読み込み
+        settings = get_settings()
+        uri = settings.COSMOS_DB_URI
+        key = settings.COSMOS_DB_KEY
+        database_name = settings.COSMOS_DB_DATABASE_NAME
+        container_name = settings.COSMOS_DB_CONTAINER_NAME
 
         logger.debug(
             f"CosmosDB設定: URI={uri}, DB={database_name}, Container={container_name}"
