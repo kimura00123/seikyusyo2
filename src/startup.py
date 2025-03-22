@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from src.utils.logger import get_logger
 from src.utils.config import get_settings
+from src.utils.temp_manager import temp_manager
 
 # プロジェクトルートディレクトリをPYTHONPATHに追加
 project_root = Path(__file__).parent
@@ -13,37 +14,28 @@ logger = get_logger(__name__)
 settings = get_settings()
 
 
-def setup_environment():
-    """環境設定を行う"""
+def initialize_environment():
+    """環境の初期化を行う"""
     try:
-        # 一時ディレクトリの作成
-        temp_dir = settings.get_temp_dir
-        upload_dir = temp_dir / "uploads"
-        image_dir = temp_dir / "images"
-        processed_dir = temp_dir / "processed"
-
-        for directory in [temp_dir, upload_dir, image_dir, processed_dir]:
-            directory.mkdir(parents=True, exist_ok=True)
-            logger.info(f"ディレクトリを作成: {directory}")
-
-        # 環境変数の検証
-        settings.validate_production()
-        logger.info("環境変数の検証が完了")
-
-        # ログレベルの設定
-        log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
-        logging.getLogger().setLevel(log_level)
-        logger.info(f"ログレベルを設定: {settings.LOG_LEVEL}")
-
-        # 開発環境の場合は追加の設定
-        if settings.is_development():
-            logger.info("開発環境で実行中")
-            # 開発用の設定をここに追加
-
+        logger.info("環境の初期化を開始")
+        
+        # 一時ディレクトリの設定
+        temp_dir = settings.TEMP_DIR
+        # 文字列の場合はPathオブジェクトに変換
+        if isinstance(temp_dir, str):
+            temp_dir = Path(temp_dir)
+        
+        temp_manager.temp_dir = temp_dir
+        logger.info(f"一時ディレクトリを設定: {temp_manager.temp_dir}")
+        
+        # 古い一時ファイルのクリーンアップ
+        cleanup_environment()
+        
+        logger.info("環境の初期化が完了")
         return True
-
+        
     except Exception as e:
-        logger.error(f"環境設定でエラー: {e}", exc_info=True)
+        logger.error(f"環境の初期化でエラー: {e}", exc_info=True)
         return False
 
 
@@ -51,25 +43,21 @@ def cleanup_environment():
     """環境のクリーンアップを行う"""
     try:
         # 一時ファイルの削除
-        from src.utils.temp_file_manager import TempFileManager
-
-        temp_manager = TempFileManager(str(settings.get_temp_dir))
-        temp_manager.cleanup_old_files(max_age_hours=24)
-        logger.info("一時ファイルのクリーンアップが完了")
-
-        return True
-
+        temp_manager.temp_dir = settings.TEMP_DIR
+        deleted_count = temp_manager.cleanup_old_files(hours=24)
+        logger.info(f"一時ファイルのクリーンアップが完了: {deleted_count}件")
+        return deleted_count
     except Exception as e:
         logger.error(f"クリーンアップでエラー: {e}", exc_info=True)
-        return False
+        return 0
 
 
 def main():
     """メイン処理"""
     try:
         # 環境設定
-        if not setup_environment():
-            logger.error("環境設定に失敗しました")
+        if not initialize_environment():
+            logger.error("環境の初期化に失敗しました")
             sys.exit(1)
 
         # APIサーバーの起動
