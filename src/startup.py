@@ -44,7 +44,13 @@ def cleanup_environment():
     try:
         # 一時ファイルの削除
         temp_manager.temp_dir = settings.TEMP_DIR
-        deleted_count = temp_manager.cleanup_old_files(hours=24)
+        
+        # 設定から削除対象ファイルの経過時間を取得
+        cleanup_hours = 24  # デフォルト: 24時間
+        if hasattr(settings, 'CLEANUP_FILE_AGE_HOURS'):
+            cleanup_hours = settings.CLEANUP_FILE_AGE_HOURS
+            
+        deleted_count = temp_manager.cleanup_old_files(hours=cleanup_hours)
         logger.info(f"一時ファイルのクリーンアップが完了: {deleted_count}件")
         return deleted_count
     except Exception as e:

@@ -5,6 +5,9 @@ const API_BASE_URL = process.env.NODE_ENV === 'development'
   ? (process.env.REACT_APP_API_URL || 'http://localhost:8000') 
   : '';
 
+console.log('環境:', process.env.NODE_ENV);
+console.log('API_BASE_URL:', API_BASE_URL);
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -15,6 +18,22 @@ export const api = axios.create({
 // APIエンドポイントのプレフィックス
 // 統合デプロイ時は /api を追加
 const API_PREFIX = process.env.NODE_ENV === 'production' ? '/api' : '';
+console.log('API_PREFIX:', API_PREFIX);
+
+// テスト用に実際のAPIリクエストURLを確認
+const testUrl = `${API_BASE_URL}${API_PREFIX}/documents/status/test-id`;
+console.log('テスト用APIリクエストURL:', testUrl);
+
+// インターセプターを追加してリクエストURLをログに出力
+api.interceptors.request.use(
+  (config) => {
+    console.log('APIリクエスト:', config.method?.toUpperCase(), config.url);
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 export interface ValidationResult {
   is_valid: boolean;

@@ -2,7 +2,7 @@ import os
 from enum import Enum
 from pathlib import Path
 from typing import Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 from functools import lru_cache
@@ -18,17 +18,19 @@ class Environment(str, Enum):
     PRODUCTION = "production"
 
 
-class Settings(BaseModel):
+class Settings(BaseSettings):
     # アプリケーション設定
-    APP_ENV: str = Field("development", env="APP_ENV")
-    PORT: int = Field(8000, env="PORT")
+    APP_ENV: str = "development"
+    PORT: int = 8000
     
     # ログ設定
-    LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
-    LOG_DIR: Path = Field("logs", env="LOG_DIR")
+    LOG_LEVEL: str = "INFO"
+    LOG_DIR: Path = "logs"
     
     # 一時ファイル設定
-    TEMP_DIR: Path = Field("temp", env="TEMP_DIR")
+    TEMP_DIR: Path = "tmp"
+    CLEANUP_INTERVAL_SECONDS: int = 3600  # デフォルト: 1時間（3600秒）
+    CLEANUP_FILE_AGE_HOURS: int = 24  # デフォルト: 24時間
     
     def is_development(self) -> bool:
         """開発環境かどうかを判定する"""
@@ -43,42 +45,23 @@ class Settings(BaseModel):
         return self.TEMP_DIR
 
     # Azure OpenAI API設定
-    AZURE_OPENAI_API_KEY: str = Field(
-        default_factory=lambda: os.getenv("AZURE_OPENAI_API_KEY")
-    )
-    AZURE_OPENAI_ENDPOINT: str = Field(
-        default_factory=lambda: os.getenv("AZURE_OPENAI_ENDPOINT")
-    )
-    AZURE_OPENAI_API_VERSION: str = Field(
-        default_factory=lambda: os.getenv("AZURE_OPENAI_API_VERSION", "2023-05-15")
-    )
-    AZURE_OPENAI_DEPLOYMENT_NAME: str = Field(
-        default_factory=lambda: os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
-    )
+    AZURE_OPENAI_API_KEY: Optional[str] = None
+    AZURE_OPENAI_ENDPOINT: Optional[str] = None
+    AZURE_OPENAI_API_VERSION: str = "2023-05-15"
+    AZURE_OPENAI_DEPLOYMENT_NAME: Optional[str] = None
 
     # CosmosDB設定
-
-    COSMOS_DB_URI: Optional[str] = Field(
-        default_factory=lambda: os.getenv("COSMOS_DB_URI")
-    )
-    COSMOS_DB_KEY: Optional[str] = Field(
-        default_factory=lambda: os.getenv("COSMOS_DB_KEY")
-    )
-    COSMOS_DB_DATABASE_NAME: Optional[str] = Field(
-        default_factory=lambda: os.getenv("COSMOS_DB_DATABASE_NAME")
-    )
-    COSMOS_DB_CONTAINER_NAME: Optional[str] = Field(
-        default_factory=lambda: os.getenv("COSMOS_DB_CONTAINER_NAME")
-    )
+    COSMOS_DB_URI: Optional[str] = None
+    COSMOS_DB_KEY: Optional[str] = None
+    COSMOS_DB_DATABASE_NAME: Optional[str] = None
+    COSMOS_DB_CONTAINER_NAME: Optional[str] = None
 
     # 画像処理設定
-    IMAGE_DPI: int = Field(default_factory=lambda: int(os.getenv("IMAGE_DPI", "200")))
-    IMAGE_QUALITY: int = Field(
-        default_factory=lambda: int(os.getenv("IMAGE_QUALITY", "95"))
-    )
+    IMAGE_DPI: int = 200
+    IMAGE_QUALITY: int = 95
 
     # ディレクトリ設定
-    BASE_DIR: Path = Field(default=Path(__file__).parent.parent.parent)
+    BASE_DIR: Path = Path(__file__).parent.parent.parent
 
     # ログ関連の設定
     LOG_FORMAT: Optional[str] = None
@@ -107,11 +90,16 @@ class Settings(BaseModel):
 
         return True
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = 'utf-8'
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "env_prefix": "",
+        "extra": "ignore"
+    }
+
 
 @lru_cache()
 def get_settings() -> Settings:
     """設定を取得する（キャッシュ付き）"""
-    return Settings()
+    settings = Settings()
+    return settings
