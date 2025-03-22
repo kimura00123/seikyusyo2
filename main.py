@@ -9,13 +9,17 @@ from pydantic import ValidationError
 
 from src.core.error_handler import ErrorHandlerMiddleware
 from src.core.errors import ErrorCode, ErrorLevel
-from src.api.main import app as api_app
+from src.api.routers import document, approval  # adminを削除
+from src.startup import initialize_environment, cleanup_environment
 
 # ロガーの設定
 logger = get_logger(__name__)
 
 # 設定の取得
 settings = get_settings()
+
+# 環境の初期化
+initialize_environment()
 
 # FastAPIアプリケーションの作成
 app = FastAPI(
@@ -34,15 +38,40 @@ app.add_middleware(
 )
 
 # エラーハンドラーミドルウェアの設定
-error_middleware = ErrorHandlerMiddleware()
+app.add_middleware(ErrorHandlerMiddleware)
 
-# APIルーターをマウント
-# 注意: すべてのAPIエンドポイントに /api プレフィックスを追加
-app.mount("/api", api_app)
+# ルーターの登録
+app.include_router(document.router, prefix="/api/documents")
+app.include_router(approval.router, prefix="/api/approvals")
+# app.include_router(admin.router, prefix="/api/admin")  # コメントアウト
 
 # 静的ファイルを提供する設定
 # 注意: これはすべてのルートをキャッチするため、最後に配置する必要がある
 app.mount("/", StaticFiles(directory="frontend/build", html=True), name="static")
+
+# 起動時の処理
+@app.on_event("startup")
+async def startup_event():
+    """アプリケーション起動時の処理"""
+    try:
+        logger.info("アプリケーションを起動しています...")
+        # 環境の初期化（すでに実行済みだが、念のため）
+        initialize_environment()
+        logger.info("アプリケーションの起動が完了しました")
+    except Exception as e:
+        logger.error(f"起動処理でエラー: {e}", exc_info=True)
+
+# 終了時の処理
+@app.on_event("shutdown")
+async def shutdown_event():
+    """アプリケーション終了時の処理"""
+    try:
+        logger.info("アプリケーションをシャットダウンしています...")
+        # 環境のクリーンアップ
+        cleanup_environment()
+        logger.info("アプリケーションのシャットダウンが完了しました")
+    except Exception as e:
+        logger.error(f"終了処理でエラー: {e}", exc_info=True)
 
 if __name__ == "__main__":
     import uvicorn

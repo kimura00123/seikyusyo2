@@ -5,6 +5,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
+from functools import lru_cache
 
 # .envファイルの読み込み
 load_dotenv()
@@ -17,15 +18,29 @@ class Environment(str, Enum):
     PRODUCTION = "production"
 
 
-class Settings(BaseSettings):
-    """環境設定クラス"""
-
-    # 基本設定
-    ENV: Environment = Field(
-        default_factory=lambda: Environment(os.getenv("ENV", "development"))
-    )
-    LOG_LEVEL: str = Field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
-    PORT: int = Field(default_factory=lambda: int(os.getenv("PORT", "8000")))
+class Settings(BaseModel):
+    # アプリケーション設定
+    APP_ENV: str = Field("development", env="APP_ENV")
+    PORT: int = Field(8000, env="PORT")
+    
+    # ログ設定
+    LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
+    LOG_DIR: Path = Field("logs", env="LOG_DIR")
+    
+    # 一時ファイル設定
+    TEMP_DIR: Path = Field("temp", env="TEMP_DIR")
+    
+    def is_development(self) -> bool:
+        """開発環境かどうかを判定する"""
+        return self.APP_ENV.lower() == "development"
+    
+    def is_production(self) -> bool:
+        """本番環境かどうかを判定する"""
+        return self.APP_ENV.lower() == "production"
+    
+    def get_temp_dir(self) -> Path:
+        """一時ディレクトリのパスを取得（後方互換性のため）"""
+        return self.TEMP_DIR
 
     # Azure OpenAI API設定
     AZURE_OPENAI_API_KEY: str = Field(
@@ -64,32 +79,9 @@ class Settings(BaseSettings):
 
     # ディレクトリ設定
     BASE_DIR: Path = Field(default=Path(__file__).parent.parent.parent)
-    TEMP_DIR: Path = Field(
-        default_factory=lambda: (
-            Path(os.getenv("TEMP_DIR"))
-            if os.getenv("TEMP_DIR")
-            else Path(__file__).parent.parent.parent / "temp"
-        )
-    )
 
     # ログ関連の設定
-    LOG_DIR: str = "logs"
     LOG_FORMAT: Optional[str] = None
-
-    def is_development(self) -> bool:
-        """開発環境かどうかを判定する"""
-        return self.ENV == Environment.DEVELOPMENT
-
-    def is_production(self) -> bool:
-        """本番環境かどうかを判定する"""
-        return self.ENV == Environment.PRODUCTION
-
-    @property
-    def get_temp_dir(self) -> Path:
-        """一時ディレクトリのパスを取得する"""
-        if not self.TEMP_DIR.exists():
-            self.TEMP_DIR.mkdir(parents=True, exist_ok=True)
-        return self.TEMP_DIR
 
     def validate_production(self) -> bool:
         """本番環境用の設定を検証する"""
@@ -119,10 +111,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = 'utf-8'
 
-_settings: Optional[Settings] = None
-
+@lru_cache()
 def get_settings() -> Settings:
-    global _settings
-    if _settings is None:
-        _settings = Settings()
-    return _settings
+    """設定を取得する（キャッシュ付き）"""
+    return Settings()
