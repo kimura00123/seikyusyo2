@@ -24,7 +24,7 @@ async def get_cosmos_client():
     return client
 
 
-@router.post("/approvals/{task_id}/{detail_no}")
+@router.post("/{task_id}/{detail_no}")
 async def approve_detail(
     task_id: str,
     detail_no: str,
@@ -86,7 +86,7 @@ async def approve_detail(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/approvals/{task_id}/{detail_no}")
+@router.delete("/{task_id}/{detail_no}")
 async def cancel_approval(
     task_id: str,
     detail_no: str,
@@ -127,7 +127,7 @@ async def cancel_approval(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/approvals/{task_id}")
+@router.get("/{task_id}")
 async def get_approval_status(
     task_id: str,
     detail_no: Optional[str] = None,

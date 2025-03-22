@@ -15,6 +15,8 @@ from .exceptions import (
     DatabaseError
 )
 from src.utils.logger import get_logger
+from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi import FastAPI
 
 logger = get_logger()
 
@@ -118,11 +120,22 @@ class ErrorHandler:
             self.logger.info(log_message)
 
 
-class ErrorHandlerMiddleware:
+class ErrorHandlerMiddleware(BaseHTTPMiddleware):
     """エラーハンドリングミドルウェア"""
 
-    def __init__(self):
+    def __init__(self, app: FastAPI = None):
+        if app:
+            super().__init__(app)
         self.error_handler = ErrorHandler()
+
+    async def dispatch(self, request: Request, call_next):
+        """リクエスト処理中の例外をキャッチする"""
+        try:
+            return await call_next(request)
+        except ValidationError as exc:
+            return await self.handle_validation_error(request, exc)
+        except Exception as exc:
+            return await self.handle_unexpected_error(request, exc)
 
     async def handle_validation_error(
         self,

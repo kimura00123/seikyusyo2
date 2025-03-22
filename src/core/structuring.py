@@ -91,6 +91,42 @@ class StructuringEngine:
         logger.debug(f"テキスト前処理を実行: {len(replacements)}個の置換パターンを適用")
         return processed_text
 
+    def calculate_approximate_cost(self, model_name: str, prompt_tokens: int, completion_tokens: int) -> Any:
+        """
+        Azure OpenAI API の利用料金の概算を計算します。
+
+        Args:
+            model_name: 使用するモデル名 (例: "gpt-4o-2024-08-06")。
+            prompt_tokens: プロンプトトークン数。
+            completion_tokens: 補完トークン数。
+
+        Returns:
+            概算料金 (日本円)。モデル情報がない場合はエラーメッセージ。
+        """
+        # モデルごとの料金 (100万トークンあたり、日本円)
+        # 入力トークン100万トークンあたり$2.5 = 375円
+        # 出力トークン100万トークン当たり$10 = 1500円
+        # 1＄は150円として計算
+        model_prices = {
+            "gpt4o-japaneast": {"input": 375.0, "output": 1500.0},
+            "o3-mini": {"input": 165.0, "output": 660.0},
+            "gpt-4o-mini": {"input": 375.0, "output": 1500.0},
+            # 他のモデルの料金もここに追加可能
+        }
+
+        # モデル名が登録されていない場合はデフォルト値を使用
+        if model_name not in model_prices:
+            logger.warning(f"モデル '{model_name}' の料金情報が見つかりません。デフォルト値を使用します。")
+            # 文字列ではなく数値を返すように修正
+            return 0.0
+
+        input_cost_per_token = model_prices[model_name]["input"] / 1000000
+        output_cost_per_token = model_prices[model_name]["output"] / 1000000
+
+        total_cost = (prompt_tokens * input_cost_per_token) + (completion_tokens * output_cost_per_token)
+
+        return total_cost
+
     def reset_processing_state(self):
         """
         処理状態をリセットする
@@ -102,10 +138,12 @@ class StructuringEngine:
         self._previous_results = None
         # その他必要なリセット処理があれば追加
 
-    def structure_invoice(
-        self, text_content: str
-    ) -> DocumentStructure:
+    def structure_invoice(self, text_content: str) -> DocumentStructure:
         """テキスト要素を構造化データに変換する（改善版）"""
+        # グローバルのloggerを使用
+        from src.utils.logger import get_logger
+        logger = get_logger(__name__)
+        
         # 処理開始時に状態をリセット
         self.reset_processing_state()
         
@@ -167,7 +205,6 @@ class StructuringEngine:
 - 金額や数量の値は必ず数値のみを抽出する。¥記号やカンマ(,)など、数字以外の文字は全て取り除くこと。
 - 例: "¥1,234" → 1234, "10,000個" → 10000
 """
-
             from src.utils.config import get_settings
 
             completion = self.client.beta.chat.completions.parse(
@@ -181,6 +218,22 @@ class StructuringEngine:
 
             document = completion.choices[0].message.parsed
             
+            # トークン使用量の取得とログ記録
+            usage = completion.usage
+            prompt_tokens = usage.prompt_tokens
+            completion_tokens = usage.completion_tokens
+            total_tokens = usage.total_tokens
+            
+            # モデル名を取得
+            model_name = get_settings().AZURE_OPENAI_DEPLOYMENT_NAME
+            
+            # 概算料金を計算
+            approximate_cost = self.calculate_approximate_cost(model_name, prompt_tokens, completion_tokens)
+            
+            # トークン使用量と料金をログに記録
+            logger.info(f"トークン使用量: 入力={prompt_tokens}, 出力={completion_tokens}, 合計={total_tokens}")
+            logger.info(f"概算料金: ¥{approximate_cost:.2f} (モデル: {model_name})")
+            
             # 構造化データの後処理（数値の整形）
             document = self._post_process_document(document)
             
@@ -189,9 +242,6 @@ class StructuringEngine:
             
             return document
         except Exception as e:
-            from src.utils.logger import get_logger
-
-            logger = get_logger(__name__)
             logger.error(f"構造化データの変換に失敗: {e}")
             raise
 

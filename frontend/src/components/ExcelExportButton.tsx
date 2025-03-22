@@ -84,27 +84,43 @@ export const ExcelExportButton: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      
+      console.log('===== handleExport開始 =====');
+      console.log('taskId:', taskId);
+      console.log('isOfflineMode:', isOfflineMode);
+      console.log('hasPendingApprovals:', hasPendingApprovals);
+      console.log('pendingApprovals数:', pendingApprovals.size);
 
       // オフラインモードでない場合のみ同期を試みる
       if (!isOfflineMode && hasPendingApprovals) {
+        console.log('承認状態の同期を開始します');
         setSyncMessage(`承認状態を同期中です (0/${pendingApprovals.size})...`);
         
         // 同期処理を実行
         const syncSuccess = await syncPendingApprovals((current, total) => {
+          console.log(`承認状態の同期進捗: ${current}/${total}`);
           setSyncMessage(`承認状態を同期中です (${current}/${total})...`);
         });
         
+        console.log('承認状態の同期結果:', syncSuccess);
+        
         if (!syncSuccess) {
           // 同期に失敗した場合はオフラインモードを提案するダイアログを表示
+          console.log('承認状態の同期に失敗しました');
           setShowNetworkErrorDialog(true);
           throw new Error('承認状態の同期に失敗しました。再試行するか、オフラインモードで続行してください。');
         }
         
+        console.log('承認状態の同期が完了しました');
         setSyncMessage(null);
+      } else {
+        console.log('承認状態の同期をスキップします', 
+          isOfflineMode ? '(オフラインモード)' : '(未同期の承認状態なし)');
       }
 
       // オフラインモードの場合はローカルでの処理のみ
       if (isOfflineMode) {
+        console.log('オフラインモード: ローカルストレージに保存します');
         // ローカルストレージに保存
         saveToLocalStorage();
         
@@ -114,16 +130,21 @@ export const ExcelExportButton: React.FC = () => {
         return;
       }
 
+      console.log('エクセル出力を開始します');
       // 編集された値がある場合は、それを含めてエクセル出力
       const blob = await documentApi.downloadExcel(taskId, editedDetails);
+      console.log('エクセル出力が完了しました');
       
       // レスポンスの検証
       if (!blob || blob.size === 0) {
+        console.error('サーバーから空のファイルが返されました');
         throw new Error('サーバーから空のファイルが返されました');
       }
       
       // Content-Typeの確認
       const contentType = blob.type;
+      console.log('Content-Type:', contentType);
+      
       if (!contentType.includes('spreadsheetml') && !contentType.includes('excel') && !contentType.includes('octet-stream')) {
         console.error('予期しないContent-Type:', contentType);
         // エラーレスポンスの場合はJSONとして読み取り
@@ -163,14 +184,18 @@ export const ExcelExportButton: React.FC = () => {
 
       let downloadSucceeded = false;
 
-      // ダウンロード情報を状態に保存
-      setPendingDownload({ blob, filename });
-      downloadSucceeded = true; // 後続のフォールバック処理をスキップ
+      // File System Access APIが利用可能な場合
+      if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
+        console.log('File System Access APIを使用してファイル保存ダイアログを表示します');
+        // ダウンロード情報を状態に保存し、ダイアログを表示
+        setPendingDownload({ blob, filename });
+        downloadSucceeded = true; // 後続のフォールバック処理をスキップ
+      }
 
       // showSaveFilePickerが失敗または利用不可の場合はフォールバック方式を使用
       if (!downloadSucceeded) {
-        // フォールバック: 従来のダウンロード方法
         console.log('従来のダウンロード方法を使用します');
+        // フォールバック: 従来のダウンロード方法
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -200,6 +225,8 @@ export const ExcelExportButton: React.FC = () => {
           URL.revokeObjectURL(url);
         }, 500); // 遅延時間を増やす
       }
+      
+      console.log('===== handleExport終了 =====');
     } catch (err) {
       const error = err as Error;
       console.error('エクセルファイルのダウンロードに失敗しました:', error);
@@ -207,6 +234,149 @@ export const ExcelExportButton: React.FC = () => {
     } finally {
       setLoading(false);
       setSyncMessage(null);
+    }
+  };
+
+  // ファイル保存ダイアログでの保存処理
+  const handleSaveFile = async () => {
+    if (!pendingDownload) return;
+    
+    const { blob, filename } = pendingDownload;
+    
+    console.log('===== handleSaveFile開始 =====');
+    console.log('filename:', filename);
+    console.log('blob size:', blob.size);
+    console.log('pendingApprovals数:', pendingApprovals.size);
+    
+    try {
+      // ユーザージェスチャーのコンテキスト内で実行
+      console.log('showSaveFilePickerを呼び出します');
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{
+          description: 'Excel ファイル',
+          accept: {
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+          }
+        }]
+      });
+
+      // ファイルを保存
+      console.log('ファイルの書き込みを開始します');
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      console.log('ファイルの保存に成功しました:', filename);
+      
+      // 承認処理の状態を確認
+      console.log('承認処理の状態確認:');
+      console.log('- pendingApprovals数:', pendingApprovals.size);
+      console.log('- isOfflineMode:', isOfflineMode);
+      
+      // 未同期の承認状態があり、オフラインモードでない場合は同期を実行
+      if (pendingApprovals.size > 0 && !isOfflineMode) {
+        console.log('ファイル保存後に承認状態の同期を開始します');
+        setSyncMessage(`承認状態を同期中です (0/${pendingApprovals.size})...`);
+        
+        try {
+          // 同期処理を実行
+          const syncSuccess = await syncPendingApprovals((current, total) => {
+            console.log(`承認状態の同期進捗: ${current}/${total}`);
+            setSyncMessage(`承認状態を同期中です (${current}/${total})...`);
+          });
+          
+          console.log('ファイル保存後の承認状態の同期結果:', syncSuccess);
+          
+          if (!syncSuccess) {
+            console.log('ファイル保存後の承認状態の同期に失敗しました');
+            setShowNetworkErrorDialog(true);
+          } else {
+            console.log('ファイル保存後の承認状態の同期が完了しました');
+          }
+        } catch (syncError) {
+          console.error('ファイル保存後の承認状態の同期でエラーが発生しました:', syncError);
+          setShowNetworkErrorDialog(true);
+        } finally {
+          setSyncMessage(null);
+        }
+      } else {
+        console.log('ファイル保存後の承認状態の同期をスキップします', 
+          isOfflineMode ? '(オフラインモード)' : '(未同期の承認状態なし)');
+      }
+      
+      // 処理完了後に状態をクリア
+      setPendingDownload(null);
+      console.log('===== handleSaveFile終了 =====');
+    } catch (err) {
+      const error = err as Error;
+      console.log('ファイル保存中にエラーが発生しました:', error);
+      
+      if (error.name !== 'AbortError') {
+        // SecurityErrorの場合はフォールバック処理を実行
+        console.warn('File System Access APIでの保存に失敗、フォールバック方式を使用します:', error);
+        // フォールバック処理を実行
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', filename);
+        document.body.appendChild(link);
+        
+        try {
+          console.log('ダウンロードリンクをクリックします');
+          const clickEvent = new MouseEvent('click', {
+            view: window,
+            bubbles: true,
+            cancelable: true
+          });
+          const clickResult = link.dispatchEvent(clickEvent);
+          console.log('クリックイベントの結果:', clickResult);
+        } catch (e) {
+          console.warn('MouseEventの作成に失敗、直接clickメソッドを使用します:', e);
+          link.click();
+        }
+        
+        // 未同期の承認状態があり、オフラインモードでない場合は同期を実行
+        if (pendingApprovals.size > 0 && !isOfflineMode) {
+          console.log('フォールバック後に承認状態の同期を開始します');
+          setTimeout(async () => {
+            setSyncMessage(`承認状態を同期中です (0/${pendingApprovals.size})...`);
+            
+            try {
+              // 同期処理を実行
+              const syncSuccess = await syncPendingApprovals((current, total) => {
+                console.log(`承認状態の同期進捗: ${current}/${total}`);
+                setSyncMessage(`承認状態を同期中です (${current}/${total})...`);
+              });
+              
+              console.log('フォールバック後の承認状態の同期結果:', syncSuccess);
+              
+              if (!syncSuccess) {
+                console.log('フォールバック後の承認状態の同期に失敗しました');
+                setShowNetworkErrorDialog(true);
+              } else {
+                console.log('フォールバック後の承認状態の同期が完了しました');
+              }
+            } catch (syncError) {
+              console.error('フォールバック後の承認状態の同期でエラーが発生しました:', syncError);
+              setShowNetworkErrorDialog(true);
+            } finally {
+              setSyncMessage(null);
+            }
+          }, 1000); // ダウンロード完了後に実行
+        }
+        
+        setTimeout(() => {
+          console.log('ダウンロードリンクをクリーンアップします');
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }, 500);
+      } else {
+        console.log('ユーザーがファイル保存をキャンセルしました');
+      }
+      
+      // 処理完了後に状態をクリア
+      setPendingDownload(null);
+      console.log('===== handleSaveFile終了（エラーまたはキャンセル） =====');
     }
   };
 
@@ -240,71 +410,6 @@ export const ExcelExportButton: React.FC = () => {
   const handleEnableOfflineMode = () => {
     setOfflineMode(true);
     setShowNetworkErrorDialog(false);
-  };
-
-  // 新しい関数を追加: ユーザージェスチャーのコンテキスト内で実行される
-  const handleSaveFile = async () => {
-    if (!pendingDownload) return;
-    
-    const { blob, filename } = pendingDownload;
-    
-    try {
-      const handle = await window.showSaveFilePicker({
-        suggestedName: filename,
-        types: [{
-          description: 'Excel ファイル',
-          accept: {
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
-          }
-        }]
-      });
-
-      // ファイルを保存
-      const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-      console.log('ファイルの保存に成功しました:', filename);
-      
-      // 処理完了後に状態をクリア
-      setPendingDownload(null);
-    } catch (err) {
-      const error = err as Error;
-      if (error.name !== 'AbortError') {
-        // SecurityErrorの場合はフォールバック処理を実行
-        console.warn('File System Access APIでの保存に失敗、フォールバック方式を使用します:', error);
-        // フォールバック処理を実行
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', filename);
-        document.body.appendChild(link);
-        
-        try {
-          console.log('ダウンロードリンクをクリックします');
-          const clickEvent = new MouseEvent('click', {
-            view: window,
-            bubbles: true,
-            cancelable: true
-          });
-          const clickResult = link.dispatchEvent(clickEvent);
-          console.log('クリックイベントの結果:', clickResult);
-        } catch (e) {
-          console.warn('MouseEventの作成に失敗、直接clickメソッドを使用します:', e);
-          link.click();
-        }
-        
-        setTimeout(() => {
-          console.log('ダウンロードリンクをクリーンアップします');
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        }, 500);
-      } else {
-        console.log('ユーザーがファイル保存をキャンセルしました');
-      }
-      
-      // 処理完了後に状態をクリア
-      setPendingDownload(null);
-    }
   };
 
   return (
@@ -395,28 +500,26 @@ export const ExcelExportButton: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* ダウンロードダイアログを表示するボタンを追加 */}
-      {pendingDownload && (
-        <Dialog
-          open={!!pendingDownload}
-          onClose={() => setPendingDownload(null)}
-        >
-          <DialogTitle>ファイルの保存</DialogTitle>
-          <DialogContent>
-            <DialogContentText>
-              「ファイルを保存」ボタンをクリックして、Excelファイルを保存してください。
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleSaveFile} color="primary">
-              ファイルを保存
-            </Button>
-            <Button onClick={() => setPendingDownload(null)} color="inherit">
-              キャンセル
-            </Button>
-          </DialogActions>
-        </Dialog>
-      )}
+      {/* ファイル保存ダイアログ */}
+      <Dialog
+        open={!!pendingDownload}
+        onClose={() => setPendingDownload(null)}
+      >
+        <DialogTitle>ファイルの保存</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            「ファイルを保存」ボタンをクリックして、Excelファイルを保存してください。
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleSaveFile} color="primary">
+            ファイルを保存
+          </Button>
+          <Button onClick={() => setPendingDownload(null)} color="inherit">
+            キャンセル
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

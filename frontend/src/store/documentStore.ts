@@ -55,6 +55,10 @@ interface DocumentState {
   getNextUnapprovedDetail: () => DetailWithCustomer | null;
 }
 
+// APIエンドポイントのプレフィックス
+// 開発環境と本番環境の両方で /api を使用
+const API_PREFIX = '/api';
+
 export const useDocumentStore = create<DocumentState>((set, get) => ({
   // 初期状態
   taskId: null,

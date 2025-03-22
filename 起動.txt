@@ -31,11 +31,15 @@ uvicorn main:app --host 0.0.0.0 --workers 4
 gunicorn --bind=0.0.0.0 --timeout 600 --threads 6 --workers 3 app:app
 
 
-参考URL
+■参考URL
 https://learn.microsoft.com/ja-jp/azure/app-service/quickstart-python?tabs=fastapi%2Cwindows%2Cazure-cli%2Cazure-cli-deploy%2Cdeploy-instructions-azportal%2Cterminal-bash%2Cdeploy-instructions-zip-azcli
 
 ■AzurelocalkGIT
 https://azureossd.github.io/2024/04/23/Deploying-a-Python-FastAPI-app-to-App-Service-Linux/
+
+
+■トラブルシューティング
+https://qiita.com/kzkamiya/items/2a010126a2bd7fe282ca
 
 frontend/
   .env                # すべての環境で読み込まれる
