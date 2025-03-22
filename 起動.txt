@@ -1,0 +1,44 @@
+cd frontend
+npm run build
+cd ..
+   
+   
+uvicorn main:app --reload
+
+z
+
+
+http://localhost:8000
+
+
+
+2. Azure App Serviceへのデプロイ
+requirements.txtとstartup.shが正しく作成されていることを確認します
+
+az login
+
+①Azure CLIを使用してデプロイします：
+   az webapp up --name your-app-name --resource-group your-resource-group --runtime "PYTHON:3.10"　--logs
+   
+   az webapp up --subscription <subscription> --name <webapp-name> --resource-group  <rg> --plan  <app-service-plan> --runtime PYTHON:3.11 --debug --verbose --launch-browser --location northeurope
+②環境変数を設定します：
+   az webapp config appsettings set --name your-app-name --resource-group your-resource-group --settings ENVIRONMENT=production
+
+③デプロイが完了したら、https://your-app-name.azurewebsites.net/にアクセスして動作を確認します
+
+
+uvicorn main:app --host 0.0.0.0 --workers 4
+gunicorn --bind=0.0.0.0 --timeout 600 --threads 6 --workers 3 app:app
+
+
+参考URL
+https://learn.microsoft.com/ja-jp/azure/app-service/quickstart-python?tabs=fastapi%2Cwindows%2Cazure-cli%2Cazure-cli-deploy%2Cdeploy-instructions-azportal%2Cterminal-bash%2Cdeploy-instructions-zip-azcli
+
+■AzurelocalkGIT
+https://azureossd.github.io/2024/04/23/Deploying-a-Python-FastAPI-app-to-App-Service-Linux/
+
+frontend/
+  .env                # すべての環境で読み込まれる
+  .env.local          # すべての環境で読み込まれるが、Gitには無視される
+  .env.development    # 開発環境のみで読み込まれる
+  .env.production     # 本番環境のみで読み込まれる

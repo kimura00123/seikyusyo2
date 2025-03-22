@@ -38,6 +38,10 @@ export const ExcelExportButton: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [showNetworkErrorDialog, setShowNetworkErrorDialog] = useState(false);
+  const [pendingDownload, setPendingDownload] = useState<{
+    blob: Blob;
+    filename: string;
+  } | null>(null);
 
   // ネットワークエラーが発生したらダイアログを表示
   useEffect(() => {
@@ -159,38 +163,9 @@ export const ExcelExportButton: React.FC = () => {
 
       let downloadSucceeded = false;
 
-      // ファイル保存ダイアログを表示（showSaveFilePickerが利用可能な場合）
-      if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
-        try {
-          // ユーザージェスチャーの範囲内で実行するために即時実行
-          const handle = await window.showSaveFilePicker({
-            suggestedName: filename,
-            types: [{
-              description: 'Excel ファイル',
-              accept: {
-                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
-              }
-            }]
-          });
-
-          // ファイルを保存
-          const writable = await handle.createWritable();
-          await writable.write(blob);
-          await writable.close();
-          console.log('ファイルの保存に成功しました:', filename);
-          downloadSucceeded = true;
-        } catch (err) {
-          const error = err as Error;
-          if (error.name !== 'AbortError') {
-            // SecurityErrorの場合はフォールバック処理を実行
-            console.warn('File System Access APIでの保存に失敗、フォールバック方式を使用します:', error);
-            // フォールバック処理に進む（エラーをスローしない）
-          } else {
-            console.log('ユーザーがファイル保存をキャンセルしました');
-            downloadSucceeded = true; // ユーザーによるキャンセルは成功とみなす
-          }
-        }
-      }
+      // ダウンロード情報を状態に保存
+      setPendingDownload({ blob, filename });
+      downloadSucceeded = true; // 後続のフォールバック処理をスキップ
 
       // showSaveFilePickerが失敗または利用不可の場合はフォールバック方式を使用
       if (!downloadSucceeded) {
@@ -265,6 +240,71 @@ export const ExcelExportButton: React.FC = () => {
   const handleEnableOfflineMode = () => {
     setOfflineMode(true);
     setShowNetworkErrorDialog(false);
+  };
+
+  // 新しい関数を追加: ユーザージェスチャーのコンテキスト内で実行される
+  const handleSaveFile = async () => {
+    if (!pendingDownload) return;
+    
+    const { blob, filename } = pendingDownload;
+    
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{
+          description: 'Excel ファイル',
+          accept: {
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+          }
+        }]
+      });
+
+      // ファイルを保存
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      console.log('ファイルの保存に成功しました:', filename);
+      
+      // 処理完了後に状態をクリア
+      setPendingDownload(null);
+    } catch (err) {
+      const error = err as Error;
+      if (error.name !== 'AbortError') {
+        // SecurityErrorの場合はフォールバック処理を実行
+        console.warn('File System Access APIでの保存に失敗、フォールバック方式を使用します:', error);
+        // フォールバック処理を実行
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', filename);
+        document.body.appendChild(link);
+        
+        try {
+          console.log('ダウンロードリンクをクリックします');
+          const clickEvent = new MouseEvent('click', {
+            view: window,
+            bubbles: true,
+            cancelable: true
+          });
+          const clickResult = link.dispatchEvent(clickEvent);
+          console.log('クリックイベントの結果:', clickResult);
+        } catch (e) {
+          console.warn('MouseEventの作成に失敗、直接clickメソッドを使用します:', e);
+          link.click();
+        }
+        
+        setTimeout(() => {
+          console.log('ダウンロードリンクをクリーンアップします');
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }, 500);
+      } else {
+        console.log('ユーザーがファイル保存をキャンセルしました');
+      }
+      
+      // 処理完了後に状態をクリア
+      setPendingDownload(null);
+    }
   };
 
   return (
@@ -354,6 +394,29 @@ export const ExcelExportButton: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* ダウンロードダイアログを表示するボタンを追加 */}
+      {pendingDownload && (
+        <Dialog
+          open={!!pendingDownload}
+          onClose={() => setPendingDownload(null)}
+        >
+          <DialogTitle>ファイルの保存</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              「ファイルを保存」ボタンをクリックして、Excelファイルを保存してください。
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleSaveFile} color="primary">
+              ファイルを保存
+            </Button>
+            <Button onClick={() => setPendingDownload(null)} color="inherit">
+              キャンセル
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </>
   );
 };

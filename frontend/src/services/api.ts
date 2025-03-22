@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+// 開発環境ではフルURLを使用し、本番環境では相対パスを使用
+const API_BASE_URL = process.env.NODE_ENV === 'development' 
+  ? (process.env.REACT_APP_API_URL || 'http://localhost:8000') 
+  : '';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -8,6 +11,10 @@ export const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// APIエンドポイントのプレフィックス
+// 統合デプロイ時は /api を追加
+const API_PREFIX = process.env.NODE_ENV === 'production' ? '/api' : '';
 
 export interface ValidationResult {
   is_valid: boolean;
@@ -71,7 +78,7 @@ export const documentApi = {
   uploadPdf: async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await api.post<{ task_id: string }>('/documents/upload', formData, {
+    const response = await api.post<{ task_id: string }>(`${API_PREFIX}/documents/upload`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -85,19 +92,19 @@ export const documentApi = {
       status: 'pending' | 'processing' | 'completed' | 'failed';
       result?: DocumentStructure;
       error?: string;
-    }>(`/documents/status/${taskId}`);
+    }>(`${API_PREFIX}/documents/status/${taskId}`);
     return response.data;
   },
 
   // バリデーション結果を取得
   getValidationResult: async (taskId: string) => {
-    const response = await api.get<ValidationResult>(`/documents/validation/${taskId}`);
+    const response = await api.get<ValidationResult>(`${API_PREFIX}/documents/validation/${taskId}`);
     return response.data;
   },
 
   // 明細画像を取得
   getDetailImage: async (taskId: string, detailNo: string) => {
-    const response = await api.get<Blob>(`/documents/images/${taskId}/${detailNo}`, {
+    const response = await api.get<Blob>(`${API_PREFIX}/documents/images/${taskId}/${detailNo}`, {
       responseType: 'blob',
     });
     return response.data;
@@ -114,7 +121,7 @@ export const documentApi = {
       }
       
       const response = await api.post<Blob>(
-        `/documents/excel/${taskId}`,
+        `${API_PREFIX}/documents/excel/${taskId}`,
         editedDetails ? { edited_details: Object.fromEntries(editedDetails) } : null,
         { 
           responseType: 'blob',
@@ -136,17 +143,32 @@ export const documentApi = {
       // Content-Dispositionヘッダーからファイル名を抽出（サーバーから提供されている場合）
       const contentDisposition = response.headers['content-disposition'];
       if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-        if (filenameMatch && filenameMatch[1]) {
-          // ファイル名を抽出して引用符を削除
-          let extractedFilename = filenameMatch[1].replace(/['"]/g, '');
-          console.log('サーバーから提供されたファイル名:', extractedFilename);
+        // filename*パラメータを優先的に抽出
+        const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''([^;]*)/);
+        if (filenameStarMatch && filenameStarMatch[1]) {
+          // URLデコードしてファイル名を取得
+          let extractedFilename = decodeURIComponent(filenameStarMatch[1]);
+          console.log('サーバーから提供されたファイル名(filename*):', extractedFilename);
           
           // ファイル名をレスポンスデータに添付
           Object.defineProperty(response.data, 'filename', {
             value: extractedFilename,
             writable: true
           });
+        } else {
+          // 通常のfilenameパラメータを抽出（フォールバック）
+          const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\[^;\n]*)/);
+          if (filenameMatch && filenameMatch[1]) {
+            // ファイル名を抽出して引用符を削除
+            let extractedFilename = filenameMatch[1].replace(/['"]/g, '');
+            console.log('サーバーから提供されたファイル名(filename):', extractedFilename);
+            
+            // ファイル名をレスポンスデータに添付
+            Object.defineProperty(response.data, 'filename', {
+              value: extractedFilename,
+              writable: true
+            });
+          }
         }
       }
       
@@ -216,7 +238,7 @@ export const documentApi = {
       approved_at: string;
       approved_by: string;
       message: string;
-    }>(`/approvals/${taskId}/${detailNo}`, editedDetail, {
+    }>(`${API_PREFIX}/approvals/${taskId}/${detailNo}`, editedDetail, {
       params: { user_id: userId },
     });
     return response.data;
@@ -231,7 +253,7 @@ export const documentApi = {
       approved_at: string | null;
       approved_by: string | null;
       message: string;
-    }>(`/approvals/${taskId}/${detailNo}`, {
+    }>(`${API_PREFIX}/approvals/${taskId}/${detailNo}`, {
       params: { user_id: userId },
     });
     return response.data;
@@ -250,15 +272,15 @@ export const documentApi = {
       }>;
       total_details: number;
       approved_count: number;
-    }>(`/approvals/${taskId}`);
+    }>(`${API_PREFIX}/approvals/${taskId}`);
     return response.data;
   },
 
   // 承認履歴を取得
   getApprovalHistory: async (taskId: string, detailNo?: string) => {
     const url = detailNo 
-      ? `/approvals/${taskId}/history?detail_no=${detailNo}`
-      : `/approvals/${taskId}/history`;
+      ? `${API_PREFIX}/approvals/${taskId}/history?detail_no=${detailNo}`
+      : `${API_PREFIX}/approvals/${taskId}/history`;
     const response = await api.get<Array<{
       detail_no: string;
       action: "approve" | "cancel";

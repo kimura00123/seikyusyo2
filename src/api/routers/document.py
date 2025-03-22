@@ -10,6 +10,7 @@ from src.core.image_processor import ImageProcessor
 from src.core.excel_exporter import ExcelExporter
 from src.utils.temp_manager import temp_manager
 from src.utils.config import get_settings
+from urllib.parse import quote
 
 # ロガーの設定
 logger = get_logger(__name__)
@@ -145,12 +146,20 @@ async def download_excel(
         original_filename = temp_manager.get_original_filename(task_id)
         filename_base = os.path.splitext(original_filename)[0]
         excel_filename = f"{filename_base}.xlsx"
-
-        return FileResponse(
+        
+        # URLエンコードを使用
+        encoded_filename = quote(excel_filename)
+        
+        # FileResponseを作成（filenameパラメータは指定しない）
+        response = FileResponse(
             excel_path,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename=excel_filename,
         )
+        
+        # Content-Dispositionヘッダーを手動で設定（filename*パラメータのみ使用）
+        response.headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{encoded_filename}"
+        
+        return response
 
     except Exception as e:
         logger.error(f"エクセル出力でエラー: {e}", exc_info=True)
