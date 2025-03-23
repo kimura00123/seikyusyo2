@@ -75,7 +75,7 @@ def main():
 
         logger.info(f"APIサーバーを起動: {host}:{port}")
         uvicorn.run(
-            "src.api.main:app",  # アプリケーションをインポート文字列として指定
+            "main:app",  # アプリケーションをインポート文字列として指定（src.api.main:appから変更）
             host=host,
             port=port,
             reload=reload

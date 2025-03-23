@@ -10,7 +10,6 @@ import asyncio
 
 from src.core.error_handler import ErrorHandlerMiddleware
 from src.core.errors import ErrorCode, ErrorLevel
-from src.api.routers import document, approval  # adminを削除
 from src.startup import initialize_environment, cleanup_environment
 
 # ロガーの設定
@@ -41,7 +40,8 @@ app.add_middleware(
 # エラーハンドラーミドルウェアの設定
 app.add_middleware(ErrorHandlerMiddleware)
 
-# ルーターの登録
+# ルーターのインポートと登録（循環インポートを避けるため、ここでインポート）
+from src.api.routers import document, approval
 app.include_router(document.router, prefix="/api/documents")
 app.include_router(approval.router, prefix="/api/approvals")
 # app.include_router(admin.router, prefix="/api/admin")  # コメントアウト
