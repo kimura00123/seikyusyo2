@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pytest_mock import MockerFixture
 
-from src.api.main import app
+from main import app
 from src.utils.config import Settings
 
 

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from .routers.document import router as document_router
+from main import app
 
 app = FastAPI(title="請求書構造化システム")
 
