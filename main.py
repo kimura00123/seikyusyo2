@@ -146,10 +146,28 @@ async def manual_cleanup():
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+    from pathlib import Path
 
     host = "0.0.0.0"
     port = settings.PORT
     reload = settings.is_development()
-
-    logger.info(f"サーバーを起動: {host}:{port}")
-    uvicorn.run(app, host=host, port=port, reload=reload)
+    
+    # 証明書ファイルのパスを設定
+    cert_file = Path("certs/cert.pem")
+    key_file = Path("certs/key.pem")
+    
+    # 証明書ファイルが存在する場合はHTTPSで起動
+    if cert_file.exists() and key_file.exists():
+        logger.info(f"HTTPSサーバーを起動: {host}:{port}")
+        uvicorn.run(
+            app, 
+            host=host, 
+            port=port, 
+            reload=reload,
+            ssl_keyfile=str(key_file),
+            ssl_certfile=str(cert_file)
+        )
+    else:
+        logger.info(f"HTTPサーバーを起動: {host}:{port} (証明書ファイルが見つからないためHTTPで起動)")
+        uvicorn.run(app, host=host, port=port, reload=reload)
