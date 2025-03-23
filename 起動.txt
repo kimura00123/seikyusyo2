@@ -7,6 +7,10 @@ uvicorn main:app --reload
 
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
+
+PORT=${PORT:-8000}
+uvicorn main:app --host 0.0.0.0 --port $PORT
+
 z
 
 
@@ -48,3 +52,83 @@ frontend/
   .env.local          # すべての環境で読み込まれるが、Gitには無視される
   .env.development    # 開発環境のみで読み込まれる
   .env.production     # 本番環境のみで読み込まれる
+  
+  
+  
+  
+■OpenSSL
+
+Windows版OpenSSLをインストールする手順を以下に説明します。これらの手順を順番に実行してください。
+
+---
+
+## **1. OpenSSLのダウンロード**
+1. Shining Light Productionsの公式サイトにアクセスし、Windows用のOpenSSLインストーラをダウンロードします（例: `Win64OpenSSL_Light-x.x.x.exe`）[3][4][5]。
+   - ダウンロードページ: [Shining Light Productions](https://slproweb.com/products/Win32OpenSSL.html)
+
+---
+
+## **2. インストーラの実行**
+1. ダウンロードしたインストーラファイルを右クリックして「管理者として実行」を選択します[4][5]。
+2. 使用許諾契約書が表示されたら、「I accept the agreement」にチェックを入れて「Next」をクリックします[1][4]。
+
+---
+
+## **3. インストール設定**
+1. インストール先フォルダを指定します。特別な理由がない限り、デフォルトのパス（例: `C:\Program Files\OpenSSL-Win64`）をそのまま使用してください[1][4]。
+2. DLLファイルの保存場所を指定する際は、「The OpenSSL binaries (/bin) directory」を選択することを推奨します[1][4]。
+3. 必要な設定が完了したら、「Install」をクリックしてインストールを開始します[4][5]。
+
+---
+
+## **4. 環境変数の設定**
+OpenSSLコマンドをどこからでも実行できるようにするため、環境変数を設定します。
+
+### **環境変数の追加**
+1. 「システムのプロパティ」を開きます（Windowsキー + Pause > 「システムの詳細設定」 > 「環境変数」）[2][6]。
+2. 「システム環境変数」の「Path」を選択して「編集」をクリックします。
+3. OpenSSLの`bin`ディレクトリ（例: `C:\Program Files\OpenSSL-Win64\bin`）を新しく追加します[2][5]。
+
+### **OPENSSL_CONF変数の設定**
+1. 新しいシステム変数として以下を追加します:
+   - **変数名:** `OPENSSL_CONF`
+   - **変数値:** `C:\Program Files\OpenSSL-Win64\bin\openssl.cfg`（インストール先に応じて変更）[2][6]。
+
+---
+
+## **5. 動作確認**
+1. コマンドプロンプトを開きます（管理者として実行）。
+2. 以下のコマンドを入力して、インストールされたOpenSSLのバージョン情報が表示されるか確認します:
+   ```
+   openssl version
+   ```
+   正常に動作していれば、バージョン番号とリリース日が表示されます[2][5]。
+
+---
+
+これでWindowsへのOpenSSLインストールは完了です。
+
+Citations:
+[1] https://and-engineer.com/articles/ZOWfGBIAACMAFsFP
+[2] https://public.cloud.myinfo.gov.sg/docs/OpenSSL_installation_guide.pdf
+[3] https://slproweb.com/products/Win32OpenSSL.html
+[4] https://it-infomation.com/openssl-install/
+[5] https://cloudzy.com/blog/install-openssl-on-windows/
+[6] https://qiita.com/etaka/items/52a3a1dc9cfb7e3bdc16
+[7] https://rms.ne.jp/sslserver/basis/openssl_on_windows/
+[8] https://www.xolphin.com/support/OpenSSL/OpenSSL_-_Installation_under_Windows
+[9] https://oji-cloud.net/2021/03/26/post-6040/
+[10] https://atmarkit.itmedia.co.jp/ait/articles/1601/29/news043.html
+[11] https://monovm.com/blog/install-openssl-on-windows/
+[12] https://help.qlik.com/ja-JP/nprinting/February2025/Content/NPrinting/DeployingQVNprinting/Installing-SSL.htm
+[13] https://envader.plus/article/390
+[14] https://stackoverflow.com/questions/50625283/how-to-install-openssl-in-windows-10
+[15] https://www.openssl.org/source/
+[16] https://jp.globalsign.com/support/ssl/confinfo/opnssl-command.html
+[17] https://www.youtube.com/watch?v=1FhQR3LkXVA
+[18] https://qiita.com/SKY-HaYaTo/items/7c40256543a4f9d14c0d
+[19] https://wiki.openssl.org/index.php/Compilation_and_Installation
+[20] https://atmarkit.itmedia.co.jp/ait/articles/2406/19/news033.html
+
+---
+Perplexity の Eliot より: pplx.ai/share  
