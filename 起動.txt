@@ -171,6 +171,5 @@ openssl req -x509 -newkey rsa:4096 -keyout certs/key.pem -out certs/cert.pem -da
 ---
 
 これで、ホスト名とIPアドレスの両方に対応した自己署名証明書が作成できます。
-
----
-Perplexity の Eliot より: pplx.ai/share
+■Powerhsell管理者権限で以下を実行する
+Import-Certificate -FilePath "certs/cert.pem" -CertStoreLocation Cert:\LocalMachine\Root
