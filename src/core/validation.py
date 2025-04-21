@@ -2,12 +2,16 @@ from typing import Dict, Any, List
 from pydantic import BaseModel
 import logging
 import re
+# mappings モジュールから定義をインポート
+from .mappings import product_type_mapping, regex_patterns
 
+logger = logging.getLogger(__name__)
 
 class ValidationError(BaseModel):
     field: str
     message: str
     severity: str = "error"
+    context: Dict[str, Any] = {}
 
 
 class ValidationResult(BaseModel):
@@ -17,12 +21,18 @@ class ValidationResult(BaseModel):
 
 class ValidationEngine:
     def __init__(self):
+        # --- ここから product_type_mapping と regex_patterns の定義を削除 ---
+        # self.product_type_mapping = { ... }
+        # self.regex_patterns = [ ... ]
+        # --- ここまで削除 ---
+
         self.rules = [
             self._validate_required_fields,
             self._validate_amounts,
             self._validate_tax_rates,
             self._validate_sequential_numbers,
             self._validate_customer_code_diversity,
+            self._validate_product_description_resolvable,
         ]
 
     def validate_invoice(self, document: Dict[str, Any]) -> ValidationResult:
@@ -297,4 +307,63 @@ class ValidationEngine:
                 )
             )
             
+        return errors
+
+    def _check_product_description(self, product_name: str) -> bool:
+        """
+        商品名が有効な業務区分/内容に解決できるかチェックするヘルパーメソッド
+        (共通化されたマッピングとパターンを使用)
+        """
+        if not product_name:
+            return False # 空文字は解決不可とする
+
+        # product_type_mapping で最も長く一致するキーを探す
+        best_match_key = None
+        for key in product_type_mapping:
+            if key in product_name:
+                if best_match_key is None or len(key) > len(best_match_key):
+                    best_match_key = key
+
+        if best_match_key:
+            # マッピングで見つかった場合は解決可能
+            return True
+
+        # マッピングで見つからない場合、正規表現パターンを試す
+        for pattern, info in regex_patterns:
+            if pattern.search(product_name):
+                # 正規表現にマッチした場合も解決可能
+                return True
+
+        # どのパターンにもマッチしない場合は解決不可
+        logger.debug(f"商品名「{product_name}」はどの定義済みパターンにも一致しませんでした。")
+        return False
+
+    def _validate_product_description_resolvable(
+        self, document: Dict[str, Any]
+    ) -> List[ValidationError]:
+        """商品名が業務区分/内容に解決できるか検証"""
+        errors = []
+        for i, customer in enumerate(document.get("customers", [])):
+            customer_code = customer.get("customer_code", f"顧客{i+1}") # コードがない場合の代替表示
+            for j, entry in enumerate(customer.get("entries", [])):
+                description = entry.get("description")
+                entry_no = entry.get("no", f"明細{j+1}") # Noがない場合の代替表示
+
+                if not description:
+                    # description が空の場合は必須フィールドチェックに任せる
+                    continue
+
+                if not self._check_product_description(description):
+                    errors.append(
+                        ValidationError(
+                            field="description",
+                            message=f"商品名「{description}」から業務区分/内容を特定できません。",
+                            severity="error",
+                            context={
+                                "customer_code": customer_code,
+                                "entry_no": entry_no,
+                                "description": description,
+                            },
+                        )
+                    )
         return errors
