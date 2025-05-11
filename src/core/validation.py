@@ -33,6 +33,7 @@ class ValidationEngine:
             self._validate_sequential_numbers,
             self._validate_customer_code_diversity,
             self._validate_product_description_resolvable,
+            self._validate_stock_quantity_fields_present,
         ]
 
     def validate_invoice(self, document: Dict[str, Any]) -> ValidationResult:
@@ -58,33 +59,52 @@ class ValidationEngine:
             )
 
         # 顧客情報の必須フィールド
-        for customer in document.get("customers", []):
+        for i, customer in enumerate(document.get("customers", [])):
+            customer_id_for_error = customer.get("customer_code", f"顧客インデックス{i}")
             if not customer.get("customer_code"):
                 errors.append(
                     ValidationError(
-                        field="customer_code", message="取引先コードは必須です"
+                        field="customer_code",
+                        message="取引先コードは必須です",
+                        context={"customer_identifier": customer_id_for_error}
                     )
                 )
             if not customer.get("customer_name"):
                 errors.append(
-                    ValidationError(field="customer_name", message="取引先名は必須です")
+                    ValidationError(
+                        field="customer_name",
+                        message="取引先名は必須です",
+                        context={"customer_identifier": customer_id_for_error}
+                    )
                 )
 
             # 明細行の必須フィールド
-            for entry in customer.get("entries", []):
+            for j, entry in enumerate(customer.get("entries", [])):
+                entry_id_for_error = entry.get("no", f"明細インデックス{j}")
                 if not entry.get("no"):
                     errors.append(
-                        ValidationError(field="no", message="明細番号は必須です")
+                        ValidationError(
+                            field="no",
+                            message="明細番号は必須です",
+                            context={"customer_identifier": customer_id_for_error, "entry_identifier": entry_id_for_error}
+                        )
                     )
                 if not entry.get("description"):
                     errors.append(
-                        ValidationError(field="description", message="商品名は必須です")
+                        ValidationError(
+                            field="description",
+                            message="商品名は必須です",
+                            context={"customer_identifier": customer_id_for_error, "entry_identifier": entry_id_for_error}
+                        )
                     )
-                if not entry.get("amount"):
+                if entry.get("amount") is None or str(entry.get("amount")).strip() == "":
                     errors.append(
-                        ValidationError(field="amount", message="金額は必須です")
+                        ValidationError(
+                            field="amount",
+                            message="金額は必須です",
+                            context={"customer_identifier": customer_id_for_error, "entry_identifier": entry_id_for_error}
+                        )
                     )
-
         return errors
 
     def _validate_sequential_numbers(self, document: Dict[str, Any]) -> List[ValidationError]:
@@ -364,6 +384,70 @@ class ValidationEngine:
                                 "entry_no": entry_no,
                                 "description": description,
                             },
+                        )
+                    )
+        return errors
+
+    def _validate_stock_quantity_fields_present(
+        self, document: Dict[str, Any]
+    ) -> List[ValidationError]:
+        """
+        在庫関連フィールドおよび数量フィールドがすべて未入力でないか検証。
+        対象: stock_info内の各フィールド、および quantity_info内のquantityフィールド。
+        """
+        errors = []
+        # Excel項目名に対応する stock_info 内のキー名
+        stock_field_keys = [
+            "carryover",       # 繰越
+            "incoming",        # 入庫
+            "w_value",         # W
+            "outgoing",        # 出庫
+            "remaining",       # 残
+            "total",           # 合計(在庫)
+            "unit_price",      # 単価(在庫)
+        ]
+        # quantity_info 内のキー名
+        quantity_field_key = "quantity"
+
+        for i, customer in enumerate(document.get("customers", [])):
+            customer_code = customer.get("customer_code", f"顧客インデックス{i}")
+            # 顧客名を取得。存在しない場合はデフォルト値を設定
+            customer_name = customer.get("customer_name", "名称不明")
+            for j, entry in enumerate(customer.get("entries", [])):
+                entry_no = entry.get("no", f"明細インデックス{j}")
+
+                stock_info = entry.get("stock_info")
+                quantity_info = entry.get("quantity_info")
+
+                all_stock_fields_empty = True
+                if stock_info:
+                    for field_key in stock_field_keys:
+                        value = stock_info.get(field_key)
+                        if value is not None and str(value).strip() != "":
+                            all_stock_fields_empty = False
+                            break
+                # else: stock_info が None の場合は、すべての在庫フィールドが空とみなす
+
+                quantity_field_empty = True
+                if quantity_info:
+                    value = quantity_info.get(quantity_field_key)
+                    if value is not None and str(value).strip() != "":
+                        quantity_field_empty = False
+                # else: quantity_info が None の場合は、数量フィールドが空とみなす
+
+                if all_stock_fields_empty and quantity_field_empty:
+                    errors.append(
+                        ValidationError(
+                            field="stock_quantity_info", # 包括的なフィールド名
+                            message=f"顧客コード「{customer_code}」(顧客名: {customer_name}) の明細「{entry_no}」で、在庫関連情報（繰越,入庫,W,出庫,残,合計(在庫),単価(在庫)）および数量がすべて未入力です。",
+                            severity="error",
+                            context={
+                                "customer_code": customer_code,
+                                "customer_name": customer_name, # コンテキストにも追加
+                                "entry_no": entry_no,
+                                "checked_stock_fields": stock_field_keys,
+                                "checked_quantity_field": quantity_field_key
+                            }
                         )
                     )
         return errors
